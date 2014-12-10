@@ -1,0 +1,786 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, vks.street_name) AS street, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, b.house) AS house,
+  IF(@street = vks.street_name AND @house = b.house, NULL, IF(b.floors = 0, '-', b.floors)) AS floors, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, IF(b.startup_year = 1900, '-', b.startup_year)) AS startup_year, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, st.structure_type) AS structure_type, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, IF(b.improvement = TRUE,'да','нет')) AS improvement, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, b.num_premises) AS num_premises,
+  IF(@street = vks.street_name AND @house = b.house, NULL, IF(vbe.id_building IS NULL, '-', 'да')) AS emergency, 
+  IF(@street = vks.street_name AND @house = b.house, NULL, IF(vbd.id_building IS NULL, '-', 'да')) AS demolished,
+  IF(@street = vks.street_name AND @house = b.house, NULL, 
+    IF(vbd.id_building IS NULL, '-', 
+    IFNULL(CONCAT(IF(vbd.or_number IS NOT NULL, 
+      CONCAT('№ ',vbd.or_number,' - '),''),DATE_FORMAT(vbd.or_date,'%d.%m.%Y')),'-'))) AS demolished_restriction,
+   IF(@street = vks.street_name AND @house = b.house, NULL, 
+    IF(vblmr.id_building IS NULL, '-',
+    IFNULL(CONCAT(IF(vblmr.in_number IS NOT NULL, 
+      CONCAT('№ ',vblmr.in_number,' - '),''),DATE_FORMAT(vblmr.in_date,'%d.%m.%Y')),'-'))) AS municipal_include_restriction,
+   IF(@street = vks.street_name AND @house = b.house, NULL, 
+    IF(vblmr.id_building IS NULL, '-',
+    IFNULL(CONCAT(IF(vblmr.ex_number IS NOT NULL, 
+      CONCAT('№ ',vblmr.ex_number,' - '),''),DATE_FORMAT(vblmr.ex_date,'%d.%m.%Y')),'-'))) AS municipal_exclude_restriction,
+   vp.m_premises_num,
+   vp.m_include_restriction,
+   vp.m_exclude_restriction,
+   vp.c_premises_num,
+   vp.c_include_restriction,
+   vp.c_exclude_restriction,
+   vp.s_premises_num,
+   vp.s_include_restriction,
+   vp.s_exclude_restriction,
+   vp.sc_premises_num,
+   vp.sc_include_restriction,
+   vp.sc_exclude_restriction,
+   vp.o_premises_num,
+   vp.o_include_restriction,
+   vp.o_exclude_restriction,
+   @street := vks.street_name AS street_eq,
+   @house := b.house AS house_eq
+FROM buildings b
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN structure_types st ON b.id_structure_type = st.id_structure_type
+  LEFT JOIN v_buildings_emergency vbe ON b.id_building = vbe.id_building
+  LEFT JOIN v_buildings_demolished vbd ON b.id_building = vbd.id_building
+  LEFT JOIN v_buildings_last_municipal_restrictions vblmr ON b.id_building = vblmr.id_building
+  RIGHT JOIN (
+SELECT IFNULL(v.c_id_building, IFNULL(v.s_id_building, IFNULL(v.sc_id_building, IFNULL(v.o_id_building, v.m_id_building)))) AS id_building, 
+  v.*
+FROM (
+SELECT v.*,
+  municipal.id_building AS m_id_building, 
+  municipal.id_premises AS m_id_premises, 
+  municipal.premises_num AS m_premises_num, 
+  municipal.municipal_include_restriction AS m_include_restriction, 
+  municipal.municipal_exclude_restriction AS m_exclude_restriction,
+  municipal.row_number AS m_row_number
+FROM (
+SELECT v.*,
+  other.id_building AS o_id_building, 
+  other.id_premises AS o_id_premises, 
+  other.premises_num AS o_premises_num, 
+  other.include_restriction AS o_include_restriction, 
+  other.exclude_restriction AS o_exclude_restriction,
+  other.row_number AS o_row_number
+FROM (
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building1 &lt;&gt; v.id_building, @row_number1 := 1, @row_number1 := @row_number1 + 1) AS row_number, 
+  v.*,
+  @id_building1 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number1 := 0, @id_building1 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building2 &lt;&gt; v.id_building, @row_number2 := 1, @row_number2 := @row_number2 + 1) AS row_number, 
+  v.*,
+  @id_building2 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number2 := 0, @id_building2 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building3 &lt;&gt; v.id_building, @row_number3 := 1, @row_number3 := @row_number3 + 1) AS row_number, 
+  v.*,
+  @id_building3 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number3 := 0, @id_building3 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building4 &lt;&gt; v.id_building, @row_number4 := 1, @row_number4 := @row_number4 + 1) AS row_number, 
+  v.*,
+  @id_building4 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number4 := 0, @id_building4 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+LEFT JOIN (SELECT 
+  IF(@id_building5 &lt;&gt; v.id_building, @row_number5 := 1, @row_number5 := @row_number5 + 1) AS row_number, 
+  v.*,
+  @id_building5 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number5 := 0, @id_building5 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number
+UNION
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building6 &lt;&gt; v.id_building, @row_number6 := 1, @row_number6 := @row_number6 + 1) AS row_number, 
+  v.*,
+  @id_building6 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number6 := 0, @id_building6 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building7 &lt;&gt; v.id_building, @row_number7 := 1, @row_number7 := @row_number7 + 1) AS row_number, 
+  v.*,
+  @id_building7 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number7 := 0, @id_building7 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building8 &lt;&gt; v.id_building, @row_number8 := 1, @row_number8 := @row_number8 + 1) AS row_number, 
+  v.*,
+  @id_building8 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number8 := 0, @id_building8 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building9 &lt;&gt; v.id_building, @row_number9 := 1, @row_number9 := @row_number9 + 1) AS row_number, 
+  v.*,
+  @id_building9 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number9 := 0, @id_building9 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+RIGHT JOIN (SELECT 
+  IF(@id_building10 &lt;&gt; v.id_building, @row_number10 := 1, @row_number10 := @row_number10 + 1) AS row_number, 
+  v.*,
+  @id_building10 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number10 := 0, @id_building10 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number) v
+LEFT JOIN
+  (SELECT 
+  IF(@id_building11 &lt;&gt; v.id_building, @row_number11 := 1, @row_number11 := @row_number11 + 1) AS row_number, 
+  v.*,
+  @id_building11 := v.id_building
+FROM v_registry_full_stat_other_rest_ordered v, 
+  (SELECT @row_number11 := 0, @id_building11 := NULL) vars) other ON
+  IFNULL(v.c_id_building, IFNULL(v.s_id_building, v.sc_id_building)) = other.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.s_row_number, v.sc_row_number)) = other.row_number
+UNION
+SELECT v.*,
+  other.id_building AS o_id_building, 
+  other.id_premises AS o_id_premises, 
+  other.premises_num AS o_premises_num, 
+  other.include_restriction AS o_include_restriction, 
+  other.exclude_restriction AS o_exclude_restriction,
+  other.row_number AS o_row_number
+FROM (
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building12 &lt;&gt; v.id_building, @row_number12 := 1, @row_number12 := @row_number12 + 1) AS row_number, 
+  v.*,
+  @id_building12 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number12 := 0, @id_building12 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building13 &lt;&gt; v.id_building, @row_number13 := 1, @row_number13 := @row_number13 + 1) AS row_number, 
+  v.*,
+  @id_building13 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number13 := 0, @id_building13 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building14 &lt;&gt; v.id_building, @row_number14 := 1, @row_number14 := @row_number14 + 1) AS row_number, 
+  v.*,
+  @id_building14 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number14 := 0, @id_building14 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building15 &lt;&gt; v.id_building, @row_number15 := 1, @row_number15 := @row_number15 + 1) AS row_number, 
+  v.*,
+  @id_building15 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number15 := 0, @id_building15 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+LEFT JOIN (SELECT 
+  IF(@id_building16 &lt;&gt; v.id_building, @row_number16 := 1, @row_number16 := @row_number16 + 1) AS row_number, 
+  v.*,
+  @id_building16 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number16 := 0, @id_building16 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number
+UNION
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building17 &lt;&gt; v.id_building, @row_number17 := 1, @row_number17 := @row_number17 + 1) AS row_number, 
+  v.*,
+  @id_building17 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number17 := 0, @id_building17 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building18 &lt;&gt; v.id_building, @row_number18 := 1, @row_number18 := @row_number18 + 1) AS row_number, 
+  v.*,
+  @id_building18 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number18 := 0, @id_building18 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building19 &lt;&gt; v.id_building, @row_number19 := 1, @row_number19 := @row_number19 + 1) AS row_number, 
+  v.*,
+  @id_building19 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number19 := 0, @id_building19 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building20 &lt;&gt; v.id_building, @row_number20 := 1, @row_number20 := @row_number20 + 1) AS row_number, 
+  v.*,
+  @id_building20 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number20 := 0, @id_building20 := NULL) vars) special ON 
+  commercial.row_number = special.row_number AND
+  commercial.id_building = special.id_building) v
+RIGHT JOIN (SELECT 
+  IF(@id_building21 &lt;&gt; v.id_building, @row_number21 := 1, @row_number21 := @row_number21 + 1) AS row_number, 
+  v.*,
+  @id_building21 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number21 := 0, @id_building21 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number) v
+RIGHT JOIN
+  (SELECT 
+  IF(@id_building22 &lt;&gt; v.id_building, @row_number22 := 1, @row_number22 := @row_number22 + 1) AS row_number, 
+  v.*,
+  @id_building22 := v.id_building
+FROM v_registry_full_stat_other_rest_ordered v, 
+  (SELECT @row_number22 := 0, @id_building22 := NULL) vars) other ON
+  IFNULL(v.c_id_building, IFNULL(v.s_id_building, v.sc_id_building)) = other.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.s_row_number, v.sc_row_number)) = other.row_number) v
+LEFT JOIN (SELECT 
+  IF(@id_building23 &lt;&gt; v.id_building, @row_number23 := 1, @row_number23 := @row_number23 + 1) AS row_number, 
+  v.*,
+  @id_building23 := v.id_building
+FROM v_registry_full_stat_municipal_rest v, 
+  (SELECT @row_number23 := 0, @id_building23 := NULL) vars) municipal ON 
+  IFNULL(v.c_id_building, IFNULL(v.sc_id_building, IFNULL(v.s_id_building, v.o_id_building))) = municipal.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.sc_row_number, IFNULL(v.s_row_number, v.o_row_number))) = municipal.row_number
+UNION 
+SELECT v.*,
+  municipal.id_building AS m_id_building, 
+  municipal.id_premises AS m_id_premises, 
+  municipal.premises_num AS m_premises_num, 
+  municipal.municipal_include_restriction AS m_include_restriction, 
+  municipal.municipal_exclude_restriction AS m_exclude_restriction,
+  municipal.row_number AS m_row_number
+FROM (
+SELECT v.*,
+  other.id_building AS o_id_building, 
+  other.id_premises AS o_id_premises, 
+  other.premises_num AS o_premises_num, 
+  other.include_restriction AS o_include_restriction, 
+  other.exclude_restriction AS o_exclude_restriction,
+  other.row_number AS o_row_number
+FROM (
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building24 &lt;&gt; v.id_building, @row_number24 := 1, @row_number24 := @row_number24 + 1) AS row_number, 
+  v.*,
+  @id_building24 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number24 := 0, @id_building24 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building25 &lt;&gt; v.id_building, @row_number25 := 1, @row_number25 := @row_number25 + 1) AS row_number, 
+  v.*,
+  @id_building25 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number25 := 0, @id_building25 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building26 &lt;&gt; v.id_building, @row_number26 := 1, @row_number26 := @row_number26 + 1) AS row_number, 
+  v.*,
+  @id_building26 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number26 := 0, @id_building26 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building27 &lt;&gt; v.id_building, @row_number27 := 1, @row_number27 := @row_number27 + 1) AS row_number, 
+  v.*,
+  @id_building27 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number27 := 0, @id_building27 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+LEFT JOIN (SELECT 
+  IF(@id_building28 &lt;&gt; v.id_building, @row_number28 := 1, @row_number28 := @row_number28 + 1) AS row_number, 
+  v.*,
+  @id_building28 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number28 := 0, @id_building28 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number
+UNION
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building29 &lt;&gt; v.id_building, @row_number29 := 1, @row_number29 := @row_number29 + 1) AS row_number, 
+  v.*,
+  @id_building29 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number29 := 0, @id_building29 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building30 &lt;&gt; v.id_building, @row_number30 := 1, @row_number30 := @row_number30 + 1) AS row_number, 
+  v.*,
+  @id_building30 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number30 := 0, @id_building30 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building31 &lt;&gt; v.id_building, @row_number31 := 1, @row_number31 := @row_number31 + 1) AS row_number, 
+  v.*,
+  @id_building31 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number31 := 0, @id_building31 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building32 &lt;&gt; v.id_building, @row_number32 := 1, @row_number32 := @row_number32 + 1) AS row_number, 
+  v.*,
+  @id_building32 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number32 := 0, @id_building32 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+RIGHT JOIN (SELECT 
+  IF(@id_building33 &lt;&gt; v.id_building, @row_number33 := 1, @row_number33 := @row_number33 + 1) AS row_number, 
+  v.*,
+  @id_building33 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number33 := 0, @id_building33 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number) v
+LEFT JOIN
+  (SELECT 
+  IF(@id_building34 &lt;&gt; v.id_building, @row_number34 := 1, @row_number34 := @row_number34 + 1) AS row_number, 
+  v.*,
+  @id_building34 := v.id_building
+FROM v_registry_full_stat_other_rest_ordered v, 
+  (SELECT @row_number34 := 0, @id_building34 := NULL) vars) other ON
+  IFNULL(v.c_id_building, IFNULL(v.s_id_building, v.sc_id_building)) = other.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.s_row_number, v.sc_row_number)) = other.row_number
+UNION
+SELECT v.*,
+  other.id_building AS o_id_building, 
+  other.id_premises AS o_id_premises, 
+  other.premises_num AS o_premises_num, 
+  other.include_restriction AS o_include_restriction, 
+  other.exclude_restriction AS o_exclude_restriction,
+  other.row_number AS o_row_number
+FROM (
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building35 &lt;&gt; v.id_building, @row_number35 := 1, @row_number35 := @row_number35 + 1) AS row_number, 
+  v.*,
+  @id_building35 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number35 := 0, @id_building35 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building36 &lt;&gt; v.id_building, @row_number36 := 1, @row_number36 := @row_number36 + 1) AS row_number, 
+  v.*,
+  @id_building36 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number36 := 0, @id_building36 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building37 &lt;&gt; v.id_building, @row_number37 := 1, @row_number37 := @row_number37 + 1) AS row_number, 
+  v.*,
+  @id_building37 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number37 := 0, @id_building37 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building38 &lt;&gt; v.id_building, @row_number38 := 1, @row_number38 := @row_number38 + 1) AS row_number, 
+  v.*,
+  @id_building38 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number38 := 0, @id_building38 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building) v
+LEFT JOIN (SELECT 
+  IF(@id_building39 &lt;&gt; v.id_building, @row_number39 := 1, @row_number39 := @row_number39 + 1) AS row_number, 
+  v.*,
+  @id_building39 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number39 := 0, @id_building39 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number
+UNION
+SELECT
+  v.*,  
+  social.id_building AS sc_id_building, 
+  social.id_premises AS sc_id_premises, 
+  social.premises_num AS sc_premises_num, 
+  social.include_restriction AS sc_include_restriction, 
+  social.exclude_restriction AS sc_exclude_restriction,
+  social.row_number AS sc_row_number
+FROM (
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building40 &lt;&gt; v.id_building, @row_number40 := 1, @row_number40 := @row_number40 + 1) AS row_number, 
+  v.*,
+  @id_building40 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number40 := 0, @id_building40 := NULL) vars) commercial
+LEFT JOIN
+(SELECT 
+  IF(@id_building41 &lt;&gt; v.id_building, @row_number41 := 1, @row_number41 := @row_number41 + 1) AS row_number, 
+  v.*,
+  @id_building41 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number41 := 0, @id_building41 := NULL) vars) special ON commercial.row_number = special.row_number AND
+                                                                   commercial.id_building = special.id_building
+UNION 
+SELECT commercial.id_building AS c_id_building, 
+  commercial.id_premises AS c_id_premises, 
+  commercial.premises_num AS c_premises_num, 
+  commercial.include_restriction AS c_include_restriction, 
+  commercial.exclude_restriction AS c_exclude_restriction,
+  commercial.row_number AS c_row_number,
+  special.id_building AS s_id_building, 
+  special.id_premises AS s_id_premises, 
+  special.premises_num AS s_premises_num, 
+  special.include_restriction AS s_include_restriction, 
+  special.exclude_restriction AS s_exclude_restriction,
+  special.row_number AS s_row_number
+FROM 
+(SELECT 
+  IF(@id_building42 &lt;&gt; v.id_building, @row_number42 := 1, @row_number42 := @row_number42 + 1) AS row_number, 
+  v.*,
+  @id_building42 := v.id_building
+FROM v_registry_full_stat_commercial_rest_ordered v, 
+  (SELECT @row_number42 := 0, @id_building42 := NULL) vars) commercial
+RIGHT JOIN
+(SELECT 
+  IF(@id_building43 &lt;&gt; v.id_building, @row_number43 := 1, @row_number43 := @row_number43 + 1) AS row_number, 
+  v.*,
+  @id_building43 := v.id_building
+FROM v_registry_full_stat_special_rest_ordered v, 
+  (SELECT @row_number43 := 0, @id_building43 := NULL) vars) special ON 
+  commercial.row_number = special.row_number AND
+  commercial.id_building = special.id_building) v
+RIGHT JOIN (SELECT 
+  IF(@id_building44 &lt;&gt; v.id_building, @row_number44 := 1, @row_number44 := @row_number44 + 1) AS row_number, 
+  v.*,
+  @id_building44 := v.id_building
+FROM v_registry_full_stat_social_rest_ordered v, 
+  (SELECT @row_number44 := 0, @id_building44 := NULL) vars) social ON
+  IFNULL(v.c_id_building, v.s_id_building) = social.id_building AND 
+  IFNULL(v.c_row_number, v.s_row_number) = social.row_number) v
+RIGHT JOIN
+  (SELECT 
+  IF(@id_building45 &lt;&gt; v.id_building, @row_number45 := 1, @row_number45 := @row_number45 + 1) AS row_number, 
+  v.*,
+  @id_building45 := v.id_building
+FROM v_registry_full_stat_other_rest_ordered v, 
+  (SELECT @row_number45 := 0, @id_building45 := NULL) vars) other ON
+  IFNULL(v.c_id_building, IFNULL(v.s_id_building, v.sc_id_building)) = other.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.s_row_number, v.sc_row_number)) = other.row_number) v
+RIGHT JOIN (SELECT 
+  IF(@id_building46 &lt;&gt; v.id_building, @row_number46 := 1, @row_number46 := @row_number46 + 1) AS row_number, 
+  v.*,
+  @id_building46 := v.id_building
+FROM v_registry_full_stat_municipal_rest v, 
+  (SELECT @row_number46 := 0, @id_building46 := NULL) vars) municipal ON 
+  IFNULL(v.c_id_building, IFNULL(v.sc_id_building, IFNULL(v.s_id_building, v.o_id_building))) = municipal.id_building AND
+  IFNULL(v.c_row_number, IFNULL(v.sc_row_number, IFNULL(v.s_row_number, v.o_row_number))) = municipal.row_number) v
+  INNER JOIN buildings b ON IFNULL(v.c_id_building, IFNULL(v.s_id_building, IFNULL(v.sc_id_building, IFNULL(v.o_id_building, v.m_id_building)))) = b.id_building
+WHERE SUBSTRING(b.id_street, 1, 13) IN ([regions])
+ORDER BY IFNULL(v.c_id_building, IFNULL(v.s_id_building, IFNULL(v.sc_id_building, IFNULL(v.o_id_building, v.m_id_building)))),
+         IFNULL(v.c_row_number, IFNULL(v.s_row_number,IFNULL(v.sc_row_number, IFNULL(v.o_row_number, v.m_row_number))))) vp ON b.id_building = vp.id_building,
+  (SELECT @i := 0, @street := NULL, @house := NULL) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">full_statistic_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\full_statistic.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[full_statistic_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

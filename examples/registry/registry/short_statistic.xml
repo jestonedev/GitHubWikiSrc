@@ -1,0 +1,113 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, vks.street_name AS street, b.house, b.floors, 
+  b.startup_year, commercial.premises AS commercial, special.premises AS special,
+  social.premises AS social, other.premises AS other
+FROM buildings b INNER JOIN
+  v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN
+  (SELECT p.id_building, GROUP_CONCAT(cp.premises_num) AS premises
+    FROM premises p INNER JOIN
+      (
+          SELECT p.id_premises, p.premises_num
+          FROM v_premises_commercial_fund p
+          UNION ALL
+          SELECT p.id_premises, CONCAT(premises_num,CONCAT('(',GROUP_CONCAT(sp.sub_premises_num)),')')
+          FROM v_sub_premises_commercial_fund sp
+            INNER JOIN premises p ON sp.id_premises = p.id_premises
+          GROUP BY sp.id_premises, p.premises_num
+      ) cp ON p.id_premises = cp.id_premises
+    WHERE p.deleted &lt;&gt; 1
+    GROUP BY p.id_building) commercial ON commercial.id_building = b.id_building
+  LEFT JOIN
+  (SELECT p.id_building, GROUP_CONCAT(cp.premises_num) AS premises
+    FROM premises p INNER JOIN
+      (
+          SELECT p.id_premises, p.premises_num
+          FROM v_premises_special_fund p  
+          UNION ALL
+          SELECT p.id_premises, CONCAT(premises_num,CONCAT('(',GROUP_CONCAT(sp.sub_premises_num)),')')
+          FROM v_sub_premises_special_fund sp
+            INNER JOIN premises p ON sp.id_premises = p.id_premises
+          GROUP BY sp.id_premises, p.premises_num
+      ) cp ON p.id_premises = cp.id_premises
+    WHERE p.deleted &lt;&gt; 1
+    GROUP BY p.id_building) special ON special.id_building = b.id_building
+  LEFT JOIN
+  (SELECT p.id_building, GROUP_CONCAT(cp.premises_num) AS premises
+    FROM premises p INNER JOIN
+      (
+          SELECT p.id_premises, p.premises_num
+          FROM v_premises_social_fund p  
+          UNION ALL
+          SELECT p.id_premises, CONCAT(premises_num,CONCAT('(',GROUP_CONCAT(sp.sub_premises_num)),')')
+          FROM v_sub_premises_social_fund sp
+            INNER JOIN premises p ON sp.id_premises = p.id_premises
+          GROUP BY sp.id_premises, p.premises_num
+      ) cp ON p.id_premises = cp.id_premises
+    WHERE p.deleted &lt;&gt; 1
+    GROUP BY p.id_building) social ON social.id_building = b.id_building
+  LEFT JOIN
+  (SELECT p.id_building, GROUP_CONCAT(cp.premises_num) AS premises
+    FROM premises p INNER JOIN
+      (
+          SELECT p.id_premises, p.premises_num
+          FROM v_premises_other_fund p    
+          UNION ALL
+          SELECT p.id_premises, CONCAT(premises_num,CONCAT('(',GROUP_CONCAT(sp.sub_premises_num)),')')
+          FROM v_sub_premises_other_fund sp
+            INNER JOIN premises p ON sp.id_premises = p.id_premises
+          GROUP BY sp.id_premises, p.premises_num
+      ) cp ON p.id_premises = cp.id_premises
+    WHERE p.deleted &lt;&gt; 1
+    GROUP BY p.id_building) other ON other.id_building = b.id_building
+  ,(SELECT @i := 0) i
+WHERE (commercial.premises IS NOT NULL OR 
+       special.premises IS NOT NULL OR 
+       social.premises IS NOT NULL OR 
+       other.premises IS NOT NULL) AND b.deleted &lt;&gt; 1;</parameter>
+    </input>
+    <output>
+      <parameter name="table">regions_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\short_statistic.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[regions_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

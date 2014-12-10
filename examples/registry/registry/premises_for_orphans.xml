@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.street_name) AS street, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.house) AS house,
+  v.premises_num, restriction,
+  @street := v.street_name AS street_eq,
+  @house := v.house AS house_eq
+FROM (
+SELECT *
+FROM (
+SELECT p.id_premises, vks.street_name, b.house, p.premises_num, NULL AS restriction
+FROM buildings b
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN v_premises_municipal p ON b.id_building = p.id_building
+  INNER JOIN restrictions_premises_assoc rpa ON p.id_premises = rpa.id_premises
+  INNER JOIN restrictions r ON rpa.id_restriction = r.id_restriction
+WHERE SUBSTRING(b.id_street, 1, 13) IN ([regions]) AND b.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1
+  AND r.id_restriction_type = 3 AND rpa.deleted &lt;&gt; 1 AND r.deleted &lt;&gt; 1 AND ((
+  SELECT `date` 
+  FROM v_premises_municipal_exclude_max_date vpme
+  WHERE vpme.id_premises = p.id_premises
+  ) IS NULL OR (SELECT `date` 
+  FROM v_premises_municipal_exclude_max_date vpme
+  WHERE vpme.id_premises = p.id_premises) &lt; r.`date`)
+UNION ALL
+SELECT p.id_premises, vks.street_name, b.house, p.premises_num, NULL AS restriction
+FROM buildings b
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN v_premises_municipal p ON b.id_building = p.id_building
+  INNER JOIN restrictions_buildings_assoc rba ON b.id_building = rba.id_building
+  INNER JOIN restrictions r ON rba.id_restriction = r.id_restriction
+WHERE SUBSTRING(b.id_street, 1, 13) IN ([regions]) AND b.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1
+  AND r.id_restriction_type = 3 AND rba.deleted &lt;&gt; 1 AND r.deleted &lt;&gt; 1 AND ((
+  SELECT `date` 
+  FROM v_premises_municipal_exclude_max_date vpme
+  WHERE vpme.id_premises = p.id_premises
+  ) IS NULL OR (SELECT `date` 
+  FROM v_premises_municipal_exclude_max_date vpme
+  WHERE vpme.id_premises = p.id_premises) &lt; r.`date`)) v
+GROUP BY id_premises
+ORDER BY street_name, house) v,
+  (SELECT @i := 0, @street := NULL, @house := NULL) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">for_orphans_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\premises_for_orphans.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[for_orphans_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

@@ -1,0 +1,92 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT IF(@id_claim = v.id_claim, NULL, @i := @i + 1) AS number,
+  IF(@id_claim = v.id_claim, NULL, IFNULL(v.personal_account,'-')) AS personal_account,
+  IF(@id_claim = v.id_claim, NULL, IFNULL(v.tenant,'-')) AS tenant,
+  IF(@id_claim = v.id_claim, NULL, v.amount_of_debt_rent) AS amount_of_debt_rent,
+  IF(@id_claim = v.id_claim, NULL, v.amount_of_debt_fine) AS amount_of_debt_fine,
+  IF(@id_claim = v.id_claim, NULL, v.amount_of_rent) AS amount_of_rent,
+  IF(@id_claim = v.id_claim, NULL, v.amount_of_fine) AS amount_of_fine,
+  IF(v.id_state IS NULL, NULL, IFNULL(v.state_type,'-')) AS state_type,
+  IF(v.id_state IS NULL, NULL, IFNULL(v.date_start_state,'-')) AS date_start_state,
+  IF(v.id_state IS NULL, NULL, IFNULL(v.date_end_state,'-')) AS date_end_state,
+  IF(v.id_state IS NULL, NULL, IFNULL(v.state_desctiption,'-')) AS state_desctiption,
+  @id_claim := v.id_claim
+FROM (
+SELECT *
+FROM (
+SELECT c.id_claim,
+  p.personal_account, 
+  CONCAT(p.surname,' ', p.name, 
+  IF(p.patronymic IS NULL,'', CONCAT(' ', p.patronymic))) AS tenant, 
+  c.amount_of_debt_rent, c.amount_of_debt_fine, c.amount_of_rent, c.amount_of_fine, 
+  cst.state_type, cs.id_state, cs.id_state_type, cs.date_start_state, cs.date_end_state, cs.description AS state_desctiption
+FROM claims c INNER JOIN 
+  tenancy_processes tc ON c.id_process = tc.id_process LEFT JOIN
+  (SELECT * FROM tenancy_persons p WHERE p.id_kinship = 1 GROUP BY p.id_process) p 
+  ON tc.id_process = p.id_process
+  LEFT JOIN claim_states cs ON c.id_claim = cs.id_claim
+  LEFT JOIN claim_state_types cst ON cst.id_state_type = cs.id_state_type
+WHERE c.deleted &lt;&gt; 1 AND tc.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1  AND (cs.deleted = 0 OR cs.deleted IS NULL)
+  AND ([filter])
+UNION
+  SELECT c.id_claim,
+  p.personal_account, 
+    CONCAT(p.surname,' ', p.name, 
+  IF(p.patronymic IS NULL,'', CONCAT(' ', p.patronymic))) AS tenant, c.amount_of_debt_rent,
+  c.amount_of_debt_fine, c.amount_of_rent, c.amount_of_fine, 
+    cst.state_type, cs.id_state, cs.id_state_type, cs.date_start_state, cs.date_end_state, cs.description AS state_desctiption
+FROM claims c INNER JOIN 
+  tenancy_processes tc ON c.id_process = tc.id_process LEFT JOIN
+  (SELECT * FROM tenancy_persons p WHERE p.id_kinship = 1 GROUP BY p.id_process) p 
+  ON tc.id_process = p.id_process
+  RIGHT JOIN claim_states cs ON c.id_claim = cs.id_claim
+  LEFT JOIN claim_state_types cst ON cst.id_state_type = cs.id_state_type
+WHERE c.deleted &lt;&gt; 1 AND tc.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND (cs.deleted = 0 OR cs.deleted IS NULL)
+    AND ([filter])) v
+ORDER BY v.id_claim, v.id_state) v, (SELECT @i := 0, @id_claim := NULL) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">claims_statistic</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\claims\claims_statistic.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[claims_statistic]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

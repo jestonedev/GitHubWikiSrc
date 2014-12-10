@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, v.*
+FROM (
+SELECT tp.registration_num, DATE_FORMAT(tp.registration_date,'%d.%m.%Y') AS registration_date, v.rent_address, tenants.tenant,
+  persons.persons, v.total_area, v.living_area, rt.rent_type, 
+  IF(tp.begin_date IS NULL AND tp.end_date IS NULL, NULL,
+  IF(tp.begin_date IS NULL,CONCAT('по ',DATE_FORMAT(tp.end_date,'%d.%m.%Y')),
+  IF(tp.end_date IS NULL,CONCAT('с ',DATE_FORMAT(tp.begin_date,'%d.%m.%Y')),
+  CONCAT('с ',DATE_FORMAT(tp.begin_date,'%d.%m.%Y'),' по ',DATE_FORMAT(tp.end_date,'%d.%m.%Y'))))) AS rent_period
+FROM tenancy_processes tp
+  INNER JOIN rent_types rt ON tp.id_rent_type = rt.id_rent_type
+  LEFT JOIN (
+  SELECT tp.id_process, CONCAT(tp.surname,' ',tp.`name`, IF(tp.patronymic IS NULL,'',CONCAT(' ',tp.patronymic))) AS tenant
+  FROM tenancy_persons tp
+  WHERE tp.id_kinship = 1 AND tp.deleted &lt;&gt; 1 AND tp.exclude_date IS NULL
+  GROUP BY tp.id_process
+  ) tenants ON tp.id_process = tenants.id_process
+  LEFT JOIN (
+  SELECT tp.id_process, GROUP_CONCAT(
+    CONCAT(tp.surname,' ',tp.`name`, IF(tp.patronymic IS NULL,'',CONCAT(' ',tp.patronymic))) SEPARATOR '$br$') AS persons
+  FROM tenancy_persons tp
+  WHERE tp.id_kinship &lt;&gt; 1 AND tp.deleted &lt;&gt; 1 AND tp.exclude_date IS NULL
+  GROUP BY tp.id_process
+  ) persons ON persons.id_process = tp.id_process
+  LEFT JOIN (
+SELECT v.id_process, 
+  v.id_street, v.house, v.premises_num, v.sub_premises_num,
+  GROUP_CONCAT(v.rent_address SEPARATOR ', ') AS rent_address,
+  SUM(v.total_area) AS total_area, 
+  SUM(v.living_area) AS living_area
+FROM (
+SELECT tba.id_process, tba.id_building,
+  vks.id_street, b.house, NULL AS premises_num, NULL AS sub_premises_num,
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house) AS rent_address,
+  SUM(IF(tba.rent_total_area IS NOT NULL,tba.rent_total_area, b.total_area)) AS total_area,
+  SUM(IF(tba.rent_living_area IS NOT NULL,tba.rent_living_area, b.living_area)) AS living_area
+FROM tenancy_buildings_assoc tba
+  INNER JOIN buildings b ON tba.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+WHERE tba.deleted &lt;&gt; 1
+GROUP BY tba.id_process, tba.id_building
+UNION ALL
+SELECT tpa.id_process, b.id_building,
+  vks.id_street, b.house, p.premises_num, NULL AS sub_premises_num,
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,', ',
+    GROUP_CONCAT(IF(p.premises_num IS NULL,NULL,
+      CONCAT(pt.premises_type_short,' ', p.premises_num)) SEPARATOR ', ')
+  ) AS rent_address,
+  SUM(IF(tpa.rent_total_area IS NOT NULL,tpa.rent_total_area, p.total_area)) AS total_area,
+  SUM(IF(tpa.rent_living_area IS NOT NULL,tpa.rent_living_area, p.living_area)) AS living_area
+FROM tenancy_premises_assoc tpa
+  INNER JOIN premises p ON tpa.id_premises = p.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN premises_types pt ON p.id_premises_type = pt.id_premises_type
+WHERE tpa.deleted &lt;&gt; 1
+GROUP BY tpa.id_process, b.id_building
+UNION ALL
+SELECT v.id_process, v.id_building, 
+  v.id_street, v.house, v.premises_num, v.sub_premises_num,
+  CONCAT(REPLACE(v.street_name,'жилрайон.', 'жилой район'),', д. ', v.house,', ',
+    GROUP_CONCAT(IF(v.premises_num_gc IS NULL,NULL, v.premises_num_gc) SEPARATOR ', ')
+  ) AS rent_address,
+  SUM(v.total_area) AS total_area,
+  SUM(v.living_area) AS living_area
+FROM (
+SELECT tspa.id_process, b.id_building,
+  vks.street_name,
+  vks.id_street, b.house, p.premises_num, sp.sub_premises_num,
+  CONCAT(
+    IF(p.premises_num IS NULL,'',CONCAT(pt.premises_type_short,' ', p.premises_num)),', ',
+    GROUP_CONCAT(IF(sp.sub_premises_num IS NULL,NULL,CONCAT('ком. ', sp.sub_premises_num)) SEPARATOR ', ')) AS premises_num_gc,
+  SUM(IF(tspa.rent_total_area IS NOT NULL,tspa.rent_total_area, sp.total_area)) AS total_area,
+  SUM(IF(tspa.rent_total_area IS NOT NULL,tspa.rent_total_area, sp.total_area)) AS living_area 
+FROM tenancy_sub_premises_assoc tspa
+  INNER JOIN sub_premises sp ON tspa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN premises_types pt ON p.id_premises_type = pt.id_premises_type
+WHERE tspa.deleted &lt;&gt; 1
+GROUP BY tspa.id_process, p.id_premises) v
+GROUP BY v.id_process, v.id_building) v
+GROUP BY v.id_process) v ON tp.id_process = v.id_process
+WHERE tp.deleted &lt;&gt; 1 AND ([filter])) v, (SELECT @i := 0) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">statistic_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\statistic.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[statistic_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.street_name) AS street, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.house) AS house,
+  v.premises_num,
+  v.floor,
+  v.total_area,
+  v.living_area,
+  v.is_commercial,
+  v.is_special,
+  v.is_social,
+  v.is_other,
+  @street := v.street_name AS street_eq,
+  @house := v.house AS house_eq
+FROM (
+SELECT *
+FROM (
+SELECT 
+  vks.street_name, b.house, vpm.premises_num, vpm.floor, vpm.total_area, vpm.living_area,
+  IF(vpcf.id_premises IS NULL, '','v') AS is_commercial,
+  IF(vpsf.id_premises IS NULL, '','v') AS is_special,
+  IF(vpspf.id_premises IS NULL, '','v') AS is_social,
+  IF(vpof.id_premises IS NULL, '','v') AS is_other
+FROM v_premises_municipal vpm
+  INNER JOIN buildings b ON b.id_building = vpm.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN v_premises_commercial_fund vpcf ON vpm.id_premises = vpcf.id_premises
+  LEFT JOIN v_premises_special_fund vpsf ON vpm.id_premises = vpsf.id_premises
+  LEFT JOIN v_premises_social_fund vpspf ON vpm.id_premises = vpspf.id_premises
+  LEFT JOIN v_premises_other_fund vpof ON  vpm.id_premises = vpof.id_premises
+  WHERE SUBSTRING(vks.id_street, 1, 13) IN ([regions])
+UNION ALL
+SELECT vks.street_name, b.house, CONCAT(vpm.premises_num,'(',sp.sub_premises_num,')') AS sub_premises_num, vpm.floor, sp.total_area, NULL,
+  IF(vpcf.id_premises IS NULL, '','v') AS is_commercial,
+  IF(vpsf.id_premises IS NULL, '','v') AS is_special,
+  IF(vpspf.id_premises IS NULL, '','v') AS is_social,
+  IF(vpof.id_premises IS NULL, '','v') AS is_other
+FROM sub_premises sp 
+  INNER JOIN v_premises_municipal vpm ON sp.id_premises = vpm.id_premises
+  INNER JOIN buildings b ON b.id_building = vpm.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN v_sub_premises_commercial_fund vpcf ON sp.id_sub_premises = vpcf.id_sub_premises
+  LEFT JOIN v_sub_premises_special_fund vpsf ON sp.id_sub_premises = vpsf.id_sub_premises
+  LEFT JOIN v_sub_premises_social_fund vpspf ON sp.id_sub_premises = vpspf.id_sub_premises
+  LEFT JOIN v_sub_premises_other_fund vpof ON  sp.id_sub_premises = vpof.id_sub_premises
+WHERE (vpcf.id_sub_premises IS NOT NULL OR 
+      vpsf.id_sub_premises IS NOT NULL OR 
+      vpspf.id_sub_premises IS NOT NULL OR
+      vpof.id_sub_premises IS NOT NULL) AND 
+      SUBSTRING(vks.id_street, 1, 13) IN ([regions])) v
+ORDER BY v.street_name, v.house) v, (SELECT @i := 0, @street := NULL, @house := NULL) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">municipal_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\municipal_premises.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[municipal_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

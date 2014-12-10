@@ -1,0 +1,187 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CASE f_tenancy_contract_type(v.id_process)
+  WHEN -1 THEN 'отсутствует'
+  WHEN 1 THEN 'комната'
+  WHEN 2 THEN 'комнаты'
+  WHEN 3 THEN 'квартира'
+  WHEN 4 THEN 'квартиры'
+  WHEN 5 THEN 'жилой дом'
+  WHEN 6 THEN 'жилые дома'
+  WHEN 7 THEN 'комната(ы) в квартире с подселением'
+  WHEN 8 THEN 'комнаты в квартирах с подселением'
+  WHEN 9 THEN 'койко-место'
+  WHEN 10 THEN 'койко-места'
+  ELSE 'неизвестно'
+  END AS tenancy_type,
+  CONCAT('Иркутская область, город Братск, ',GROUP_CONCAT(v.rent_address SEPARATOR ', ')) AS rent_address,
+  IF ([is_culture_memorial],'да','нет') AS is_culture_memorial
+FROM (
+SELECT tba.id_process, tba.id_building,
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house) AS rent_address
+FROM tenancy_buildings_assoc tba
+  INNER JOIN buildings b ON tba.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+WHERE tba.deleted &lt;&gt; 1
+GROUP BY tba.id_process, tba.id_building
+UNION ALL
+SELECT tpa.id_process, b.id_building,
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,', ',
+    GROUP_CONCAT(IF(p.premises_num IS NULL,NULL,
+      CONCAT(pt.premises_type_short,' ', p.premises_num)) SEPARATOR ', ')
+  ) AS rent_address
+FROM tenancy_premises_assoc tpa
+  INNER JOIN premises p ON tpa.id_premises = p.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN premises_types pt ON p.id_premises_type = pt.id_premises_type
+WHERE tpa.deleted &lt;&gt; 1
+GROUP BY tpa.id_process, b.id_building
+UNION ALL
+SELECT v.id_process, v.id_building,
+  CONCAT(REPLACE(v.street_name,'жилрайон.', 'жилой район'),', д. ', v.house,', ',
+    GROUP_CONCAT(IF(v.premises_num_gc IS NULL,NULL, v.premises_num_gc) SEPARATOR ', ')
+  ) AS rent_address
+FROM (
+SELECT tspa.id_process, b.id_building, vks.street_name, b.house,
+  CONCAT(
+    IF(p.premises_num IS NULL,'',CONCAT(pt.premises_type_short,' ', p.premises_num)),', ',
+    GROUP_CONCAT(IF(sp.sub_premises_num IS NULL,NULL,CONCAT('ком. ', sp.sub_premises_num)) SEPARATOR ', ')) AS premises_num_gc
+FROM tenancy_sub_premises_assoc tspa
+  INNER JOIN sub_premises sp ON tspa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN premises_types pt ON p.id_premises_type = pt.id_premises_type
+WHERE tspa.deleted &lt;&gt; 1
+GROUP BY tspa.id_process, p.id_premises) v
+GROUP BY v.id_process, v.id_building) v
+WHERE v.id_process = [id_process]
+GROUP BY v.id_process</parameter>
+    </input>
+    <output>
+      <parameter name="table">tenancy_processes</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT(head_housing_dep.surname, ' ', head_housing_dep.`name`, 
+  IF(head_housing_dep.patronymic IS NULL, '', CONCAT(' ', head_housing_dep.patronymic))) AS head_housing_dep_snp,
+  head_housing_dep.post AS head_housing_dep_post,
+  snp_template.snp_template
+FROM (
+SELECT *
+FROM history_head_housing_dep
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_head_housing_dep
+WHERE start_date &lt; STR_TO_DATE('[excerpt_date_from]','%d.%m.%Y'))
+LIMIT 1) head_housing_dep
+JOIN (
+SELECT *
+FROM history_sign_doc_snp_templates
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_sign_doc_snp_templates
+WHERE start_date &lt; STR_TO_DATE('[excerpt_date_from]','%d.%m.%Y'))
+LIMIT 1) snp_template</parameter>
+    </input>
+    <output>
+      <parameter name="table">signers</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[signers]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">signers_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[signers]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">snp_template</parameter>
+    </input>
+    <output>
+      <parameter name="value">snp_template</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\excerpt.odt</parameter>
+    </input>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[signers_row]</parameter>
+      <parameter name="column">head_housing_dep_snp</parameter>
+      <parameter name="format">[snp_template]</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">signers_row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[tenancy_processes]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[signers_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">registry_insert_date</parameter>
+      <parameter name="value">[registry_insert_date]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">excerpt_date_from</parameter>
+      <parameter name="value">[excerpt_date_from]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">excerpt_number</parameter>
+      <parameter name="value">[excerpt_number]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, vks.street_name AS street, b.house, b.floors, 
+  b.startup_year, is_emergency, is_demolished
+FROM buildings b INNER JOIN
+  v_kladr_streets vks ON b.id_street = vks.id_street
+LEFT JOIN
+(SELECT id_building, GROUP_CONCAT(premises_num) AS is_emergency
+FROM premises
+WHERE (id_building IN (SELECT id_building FROM v_buildings_emergency) OR 
+       id_premises IN (SELECT id_premises FROM v_premises_emergency)) AND (deleted &lt;&gt; 1)
+GROUP BY id_building) emergency ON b.id_building = emergency.id_building
+LEFT JOIN
+(SELECT id_building, GROUP_CONCAT(premises_num) AS is_demolished
+FROM premises
+WHERE (id_building IN (SELECT id_building FROM v_buildings_demolished) OR 
+       id_premises IN (SELECT id_premises FROM v_premises_demolished)) AND (deleted &lt;&gt; 1)
+GROUP BY id_building) demolished
+  ON b.id_building = demolished.id_building
+WHERE (is_demolished IS NOT NULL OR is_emergency IS NOT NULL) AND b.deleted &lt;&gt; 1 AND
+  SUBSTRING(b.id_street, 1, 13) IN ([regions])</parameter>
+    </input>
+    <output>
+      <parameter name="table">regions_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\ownerships_report.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[regions_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

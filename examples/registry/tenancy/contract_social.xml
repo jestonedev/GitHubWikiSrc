@@ -1,0 +1,671 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT tenancy_type, registration_num, 
+  registration_date,
+  CASE tenancy_type 
+    WHEN -1 THEN 'ошибка'
+    WHEN 0 THEN 'комплекс помещений'
+    WHEN 1 THEN 'комната'
+    WHEN 2 THEN 'комнаты'
+    WHEN 3 THEN 'квартира'
+    WHEN 4 THEN 'квартиры'
+    WHEN 5 THEN 'частный дом'
+    WHEN 6 THEN 'частные дома'
+    WHEN 7 THEN 'квартира с подселением'
+    WHEN 8 THEN 'квартиры с подселением'
+  END AS tenancy_premises_str,
+  CONCAT(
+  IF(v.begin_date IS NULL,'',CONCAT('с $b$',DATE_FORMAT(v.begin_date,'%d.%m.%Y'),'$/b$')),
+  IF (v.begin_date IS NULL AND v.end_date IS NULL, '', ' '),
+  IF(v.end_date IS NULL,'',CONCAT('по $b$',DATE_FORMAT(v.end_date,'%d.%m.%Y'),'$/b$'))) AS rent_period,
+  NULL AS guardian
+FROM (
+SELECT f_tenancy_contract_type(tp.id_process) AS tenancy_type,
+  tp.registration_num, tp.registration_date, tp.begin_date, tp.end_date
+FROM tenancy_processes tp
+WHERE deleted &lt;&gt; 1 AND (tp.registration_num IS NOT NULL) AND tp.id_process = [id_process]) v</parameter>
+    </input>
+    <output>
+      <parameter name="table">t1</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[t1]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">tenancy_type</parameter>
+    </input>
+    <output>
+      <parameter name="value">tenancy_type</parameter>
+    </output>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != -1</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">8</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IODebugMessage" repeat="1">
+    <input>
+      <parameter name="message">В договоре найма не указано нанимаемое жилье</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonExit" repeat="1">
+    <input>
+      <parameter name="condition"></parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != 1</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">12</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT(
+  'общая площадь — ',
+  CAST(SUM(v.total_area) AS CHAR),' кв.м.',
+  ', в том числе жилая — ',
+  CAST(SUM(v.living_area) AS CHAR),' кв.м.') AS premise_info, 
+  CONCAT(GROUP_CONCAT(
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,
+    IF(v.sub_premise_num IS NULL,'',CONCAT(', ', v.sub_premise_num))
+  ) SEPARATOR ', '),'.') AS rent_address 
+FROM (
+SELECT 
+  p.id_premises, 
+  CONCAT('кв. ',p.premises_num,' ком. ', GROUP_CONCAT(sp.sub_premises_num SEPARATOR ', ')) AS sub_premise_num, 
+  SUM(sp.total_area) AS living_area, 
+  SUM(sp.total_area) AS total_area
+FROM tenancy_sub_premises_assoc tspa
+  INNER JOIN sub_premises sp ON tspa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+WHERE tspa.deleted &lt;&gt; 1 AND sp.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND tspa.id_process = [id_process]
+GROUP BY sp.id_premises
+UNION ALL
+SELECT p.id_premises,
+  CONCAT('ком. ',p.premises_num),
+  p.living_area,
+  p.total_area
+FROM tenancy_premises_assoc tpa
+  INNER JOIN premises p ON tpa.id_premises = p.id_premises
+WHERE tpa.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND tpa.id_process = [id_process] AND p.id_premises_type = 2  
+  ) v
+  INNER JOIN premises p ON p.id_premises = v.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street;</parameter>
+    </input>
+    <output>
+      <parameter name="table">address</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\contract_social_room.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != 2</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">16</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT(
+  'общая площадь — ',
+  CAST(SUM(v.total_area) AS CHAR),' кв.м.',
+  ', в том числе жилая — ',
+  CAST(SUM(v.living_area) AS CHAR),' кв.м.') AS premise_info, 
+  CONCAT(GROUP_CONCAT(
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,
+    IF(v.sub_premise_num IS NULL,'',CONCAT(', ', v.sub_premise_num))
+  ) SEPARATOR ', '),'.') AS rent_address 
+FROM (
+SELECT 
+  p.id_premises, 
+  CONCAT('кв. ',p.premises_num,' ком. ', GROUP_CONCAT(sp.sub_premises_num SEPARATOR ', ')) AS sub_premise_num, 
+  SUM(sp.total_area) AS living_area, 
+  SUM(sp.total_area) AS total_area
+FROM tenancy_sub_premises_assoc tspa
+  INNER JOIN sub_premises sp ON tspa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+WHERE tspa.deleted &lt;&gt; 1 AND sp.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND tspa.id_process = [id_process]
+GROUP BY sp.id_premises
+UNION ALL
+SELECT p.id_premises,
+  CONCAT('ком. ',p.premises_num),
+  p.living_area,
+  p.total_area
+FROM tenancy_premises_assoc tpa
+  INNER JOIN premises p ON tpa.id_premises = p.id_premises
+WHERE tpa.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND tpa.id_process = [id_process] AND p.id_premises_type = 2  
+  ) v
+  INNER JOIN premises p ON p.id_premises = v.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street;</parameter>
+    </input>
+    <output>
+      <parameter name="table">address</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\contract_social_room.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != 3</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">20</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,
+    IF(p.premises_num IS NULL,'',CONCAT(', кв. ', p.premises_num))
+  ) AS rent_address,
+  CONCAT('количество комнат — ', 
+  IF(IFNULL(sp.sub_premises_count,0) &lt;= p.num_rooms, p.num_rooms, sp.sub_premises_count),
+  ', общая площадь — ', p.total_area,' кв.м.',
+  ', в том числе жилая — ', p.living_area,' кв.м.') AS premise_info
+FROM tenancy_premises_assoc tpa
+  INNER JOIN premises p ON tpa.id_premises = p.id_premises
+  INNER JOIN buildings b ON p.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN (SELECT id_premises, COUNT(*) AS sub_premises_count
+              FROM sub_premises 
+              WHERE deleted &lt;&gt; 1
+              GROUP BY id_premises) sp ON p.id_premises = sp.id_premises
+WHERE tpa.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND b.deleted &lt;&gt; 1 AND tpa.id_process = [id_process]</parameter>
+    </input>
+    <output>
+      <parameter name="table">address</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\contract_social_flat.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != 5</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">24</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house) AS rent_address, 
+  CONCAT('количество комнат - ', 
+  IF(IFNULL(v2.rooms_count,0) &gt; b.num_rooms, v2.rooms_count,b.num_rooms),
+  ', общая площадь — ',b.total_area,' кв.м.',
+  ', в том числе жилая - ', b.living_area,' кв.м.') AS premise_info
+FROM tenancy_buildings_assoc tba
+  INNER JOIN buildings b ON tba.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  LEFT JOIN (SELECT id_building, COUNT(*) AS rooms_count
+             FROM premises p
+             WHERE p.id_premises_type = 2 AND p.deleted &lt;&gt; 1
+             GROUP BY p.id_building) v2 ON b.id_building = v2.id_building
+WHERE tba.deleted &lt;&gt; 1 AND b.deleted &lt;&gt; 1 AND tba.id_process = [id_process]</parameter>
+    </input>
+    <output>
+      <parameter name="table">address</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\contract_social_house.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [tenancy_type] != 7</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">28</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(REPLACE(vks.street_name,'жилрайон.', 'жилой район'),', д. ', b.house,
+    IF(v.premises_num IS NULL,'',CONCAT(', ', v.premises_num))) AS rent_address,
+  v.rooms_count,
+  CONCAT(
+  'количество комнат — ',
+  v.shared_rooms_count,', ',
+  'общая площадь — ',
+  CAST(v.total_area AS CHAR),' кв.м.',
+  ', в том числе жилая — ',
+  CAST(v.living_area AS CHAR),' кв.м. ',IFNULL(v.rooms_area_details,'')) AS premise_info
+FROM (
+SELECT p.id_premises, p.id_building, 
+  IF(IFNULL(rooms_count,0) &lt;= p.num_rooms, p.num_rooms, rooms_count) AS rooms_count,
+  COUNT(*) shared_rooms_count,
+  CONCAT('кв. ',p.premises_num,', ком. ',
+    GROUP_CONCAT(sp.sub_premises_num SEPARATOR ', ')) AS premises_num, 
+  SUM(sp.total_area) AS total_area, 
+  SUM(sp.total_area) AS living_area,
+  IF(COUNT(*) = 1, NULL, 
+   CONCAT('(',GROUP_CONCAT(CONCAT(sp.total_area,' кв.м.') SEPARATOR ', '),')')) AS rooms_area_details
+FROM tenancy_sub_premises_assoc tspa
+  INNER JOIN sub_premises sp ON tspa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+  LEFT JOIN (SELECT sp.id_premises,COUNT(*) AS rooms_count 
+             FROM sub_premises sp 
+             WHERE sp.deleted &lt;&gt; 1
+             GROUP BY sp.id_premises) v_sp
+  ON p.id_premises = v_sp.id_premises
+WHERE tspa.deleted &lt;&gt; 1 AND p.deleted &lt;&gt; 1 AND p.id_premises_type = 3 AND tspa.id_process = [id_process]
+GROUP BY p.id_premises
+LIMIT 1) v
+  INNER JOIN buildings b ON v.id_building = b.id_building
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street</parameter>
+    </input>
+    <output>
+      <parameter name="table">address</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\contract_social_share_flat.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = ([tenancy_type] == -1) || ([tenancy_type] == 1) || ([tenancy_type] == 2) || ([tenancy_type] == 3) || ([tenancy_type] == 5) || ([tenancy_type] == 7)</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">32</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IODebugMessage" repeat="1">
+    <input>
+      <parameter name="message">Вы пытаетесь распечатать неподдерживаемый тип договора. Проверьте перечень сдаваемого жилья.</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonExit" repeat="1">
+    <input>
+      <parameter name="condition">true</parameter>
+    </input>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeColToString" repeat="1">
+    <input>
+      <parameter name="inTable">[t1]</parameter>
+      <parameter name="column">registration_date</parameter>
+      <parameter name="format">ddn MMg yyyyg</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t1</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(tp.surname, ' ', tp.`name`, 
+  IF(tp.patronymic IS NULL, '', CONCAT(' ', tp.patronymic))) AS tenant_snp,
+  DATE_FORMAT(tp.date_of_birth,'%d.%m.%Y') AS tenant_date_of_birth
+FROM tenancy_persons tp
+WHERE deleted &lt;&gt; 1 AND tp.id_kinship = 1 AND tp.id_process = [id_process]
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">t2</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(chairman.surname, ' ', chairman.`name`, 
+  IF(chairman.patronymic IS NULL, '', CONCAT(' ', chairman.patronymic))) AS chairman_snp,
+  chairman.post AS chairman_post, snp_template.snp_template, committee.committee_name
+FROM (
+SELECT h.*, cw.chairman_warrant
+FROM history_chairmans h
+  INNER JOIN chairman_warrants cw ON h.id_chairman_warrant = cw.id_chairman_warrant
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_chairmans
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) chairman
+JOIN (
+SELECT *
+FROM history_sign_doc_snp_templates
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_sign_doc_snp_templates
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) snp_template
+JOIN (
+SELECT *
+FROM history_committee_names
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_committee_names
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) committee</parameter>
+    </input>
+    <output>
+      <parameter name="table">t3</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[t3]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">snp_template</parameter>
+    </input>
+    <output>
+      <parameter name="value">snp_template</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[t3]</parameter>
+      <parameter name="column">chairman_snp</parameter>
+      <parameter name="format">[snp_template]</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t3</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT tr.id_reason, IF(tr.id_reason = 23,
+  'в целях реализации муниципальной целевой программы «Переселение граждан из ветхого и аварийного жилищного фонда в городе Братске на 2005-2025 гг.», утвержденной', 
+  'на основании решения о предоставлении жилого помещения:') AS reason_group, 
+  GROUP_CONCAT(tr.reason_prepared) AS reasons
+FROM tenancy_reasons tr
+WHERE tr.deleted &lt;&gt; 1 AND tr.id_process = [id_process]
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">t4</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT('в лице ', IFNULL(chairman.post_genetive,''),' ') AS prefix, 
+  CONCAT(chairman.surname, ' ', chairman.`name`, 
+  IF(chairman.patronymic IS NULL, '', CONCAT(' ', chairman.patronymic))) AS snp,
+  CONCAT(', ',chairman_warrant) AS warrant
+FROM (
+SELECT h.*, cw.chairman_warrant
+FROM history_chairmans h
+  INNER JOIN chairman_warrants cw ON h.id_chairman_warrant = cw.id_chairman_warrant
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_chairmans
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) chairman</parameter>
+    </input>
+    <output>
+      <parameter name="table">t5</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[t5]</parameter>
+      <parameter name="column">snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t5</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="TableConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[t5]</parameter>
+      <parameter name="rowSeparator"></parameter>
+      <parameter name="cellSeparator"></parameter>
+    </input>
+    <output>
+      <parameter name="outValue">in_face_of</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(tp.surname, ' ', tp.`name`, 
+  IF(tp.patronymic IS NULL, '', CONCAT(' ', tp.patronymic))) AS tenant_snp,
+  CONCAT(
+  IFNULL(tp.document_num,''), 
+  IF(tp.document_num IS NULL AND tp.document_seria IS NULL,'',' '),
+  IFNULL(tp.document_seria,'')) AS tenant_document,
+  CONCAT(
+    IF(tp.registration_id_street IS NULL,'',
+    CONCAT('место регистрации: ',IFNULL(CONCAT(vks1.street_name, 
+      IF(tp.registration_house IS NULL,'',CONCAT(' д. ',tp.registration_house)),
+      IF(tp.registration_flat IS NULL,'',CONCAT(' кв. ',tp.registration_flat)),
+      IF(tp.registration_room IS NULL,'',CONCAT(' ком. ',tp.registration_room)))
+      ,''))),
+    IF(tp.residence_id_street IS NULL,'',
+    CONCAT('место проживания: ',IFNULL(CONCAT(vks2.street_name, 
+      IF(tp.residence_house IS NULL,'',CONCAT(' д. ',tp.registration_house)),
+      IF(tp.residence_flat IS NULL,'',CONCAT(' кв. ',tp.registration_flat)),
+      IF(tp.residence_room IS NULL,'',CONCAT(' ком. ',tp.registration_room)))
+      ,'')))
+  ) AS tenant_address
+FROM tenancy_persons tp
+  LEFT JOIN v_kladr_streets vks1 ON tp.registration_id_street = vks1.id_street 
+  LEFT JOIN v_kladr_streets vks2 ON  tp.residence_id_street = vks2.id_street
+WHERE deleted &lt;&gt; 1 AND tp.id_kinship = 1 AND tp.id_process = [id_process] AND exclude_date IS NULL
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">tenant_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, CONCAT(tp.surname, ' ', tp.`name`, 
+  IF(tp.patronymic IS NULL, '', CONCAT(' ', tp.patronymic))) AS person_snp,
+  IF(k.id_kinship = 64,'',k.kinship) AS person_kinship, DATE_FORMAT(tp.date_of_birth,'%d.%m.%Y') AS date_of_birth
+FROM tenancy_persons tp
+  INNER JOIN kinships k ON tp.id_kinship = k.id_kinship, (SELECT @i := 0) vars
+WHERE deleted &lt;&gt; 1 AND tp.id_kinship &lt;&gt; 1 AND tp.id_process = [id_process] AND exclude_date IS NULL</parameter>
+    </input>
+    <output>
+      <parameter name="table">persons_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t1]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t1_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t2]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t2_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t3]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t3_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t4]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t4_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t5]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t5_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[address]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">address_row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t1_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t2_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t3_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t4_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t5_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[tenant_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[persons_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">in_face_of</parameter>
+      <parameter name="value">[in_face_of]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[address_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

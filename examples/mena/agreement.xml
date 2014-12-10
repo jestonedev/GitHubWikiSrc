@@ -1,0 +1,340 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <exclude>*</exclude>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetProvider" repeat="1">
+    <input>
+      <parameter name="name">odbc</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlModifyQuery" repeat="1">
+    <input>
+      <parameter name="query">SET SESSION group_concat_max_len = 1000000;</parameter>
+    </input>
+    <output>
+      <parameter name="rowsAffected"></parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT * FROM v_agreement_info WHERE id_contract = [id_contract]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_agreement_db_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">
+				SELECT CONCAT(CONCAT(p.family, ' ', p.name),' ', p.father) AS snp, 
+					IF(TRIM(portion) = '1','',' – доля в праве ') AS portion_text, IF(TRIM(portion) = '1','',portion) AS portion
+				FROM ((`contracts` `c`
+				  LEFT JOIN `apartments` `a`
+					ON ((`c`.`id_apartment_side2` = `a`.`id_apartment`)))
+				  LEFT JOIN `persons` `p`
+					ON ((`a`.`id_apartment` = `p`.`id_apartment`)))
+				WHERE (p.id_contractor = 1) AND (c.id_contract = [id_contract])			
+			</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_agreement_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">			SELECT vp.snp AS person_fio,
+			  IF(ISNULL(vp.warrant), '',
+			  IF(DATE(DATE_ADD(p.birth, interval 14 year)) &gt; DATE(NOW()), '(законный представитель по доверенности %fio%)',
+			  IF(DATE(DATE_ADD(p.birth, interval 18 year)) &gt; DATE(NOW()),
+			  '(действовавший с согласия законного представителя %fio%)','(представитель по доверенности %fio%)'))) AS person_warrant,
+			  IF(ISNULL(vp.warrant), '',
+			  IF(DATE(DATE_ADD(p.birth, interval 14 year)) &gt; DATE(NOW()), 'Nominative',
+			  IF(DATE(DATE_ADD(p.birth, interval 18 year)) &gt; DATE(NOW()), 'Genitive','Nominative'))) AS text_case,
+			  vp.warrant_fio,
+			  vp.snp AS person_fio_short
+				FROM v_persons vp
+			  LEFT JOIN persons p ON (p.id_person = vp.id_person)
+			  INNER JOIN apartments a ON(vp.id_apartment = a.id_apartment)
+			  INNER JOIN contracts c ON (c.id_apartment_side2 = a.id_apartment)
+			WHERE c.id_contract = [id_contract]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_person_signers_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">
+			SELECT snp AS person_fio_genetive, snp AS person_fio_dative, snp AS person_fio_instrumental
+			FROM v_persons vp INNER JOIN
+			  apartments a USING(id_apartment) INNER JOIN contracts c ON (c.id_apartment_side2 = a.id_apartment)
+			WHERE c.id_contract = [id_contract]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_person_padegs_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_agreement_db_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">agreement_registration_date</parameter>
+      <parameter name="format">«dd» MMg yyyy года</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">side1_room_count</parameter>
+      <parameter name="textCase">Genitive</parameter>
+      <parameter name="sex">Female</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">side2_room_count</parameter>
+      <parameter name="textCase">Genitive</parameter>
+      <parameter name="sex">Female</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">side1_evaluation_price_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">side2_evaluation_price_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">agreement_signer_fio</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_agreement_row]</parameter>
+      <parameter name="column">represent_fio_genitive</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_agreement_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_genetive</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_person_padegs_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_dative</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Dative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_person_padegs_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_instrumental</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Instrumental</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_person_padegs_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ColumnConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_genetive</parameter>
+      <parameter name="separator">, </parameter>
+    </input>
+    <output>
+      <parameter name="outValue">persons_genitive</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ColumnConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_dative</parameter>
+      <parameter name="separator">, </parameter>
+    </input>
+    <output>
+      <parameter name="outValue">persons_dative</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ColumnConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_padegs_table]</parameter>
+      <parameter name="column">person_fio_instrumental</parameter>
+      <parameter name="separator">, </parameter>
+    </input>
+    <output>
+      <parameter name="outValue">persons_instrumental</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_signers_table]</parameter>
+      <parameter name="column">person_fio_short</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_person_signers_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_agreement_owner_ship_table]</parameter>
+      <parameter name="column">snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_agreement_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="TableConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_agreement_owner_ship_table]</parameter>
+      <parameter name="rowSeparator">, </parameter>
+      <parameter name="cellSeparator"></parameter>
+    </input>
+    <output>
+      <parameter name="outValue">owner_ships</parameter>
+    </output>
+  </step>
+  <step plugin="MenaModule" action="MenaSignersTableConvert" repeat="1">
+    <input>
+      <parameter name="inTable">[v_person_signers_table]</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_person_signers_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]agreement.odt</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">owner_ships</parameter>
+      <parameter name="value">[owner_ships]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">persons_genitive</parameter>
+      <parameter name="value">[persons_genitive]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">persons_dative</parameter>
+      <parameter name="value">[persons_dative]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">persons_instrumental</parameter>
+      <parameter name="value">[persons_instrumental]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_agreement_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[v_person_signers_table]</parameter>
+      <parameter name="xmlContractor">Table</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

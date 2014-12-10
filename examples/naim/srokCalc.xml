@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  ContractRegistrationNumber, 
+	DATE_FORMAT(ContractRegistrationDate,'%d.%m.%Y') AS ContractRegistrationDate,
+	DATE_FORMAT(ContractBeginDate,'%d.%m.%Y')AS ContractBeginDate,
+	DATE_FORMAT(ContractEndDate,'%d.%m.%Y')AS ContractEndDate,
+	FIO,
+	RentType,
+	fullAddress
+FROM
+	for_calendar;</parameter>
+    </input>
+    <output>
+      <parameter name="table">calendarTable</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[calendarTable]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">Zag</parameter>
+      <parameter name="value">[Zag]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]srokCalc.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

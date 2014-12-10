@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT
+  b.id_contract,
+  ContractRegistrationNumber,
+  ifnull(a.family,'''')as family,
+  ifnull(a.name,'''')as name,
+  ifnull(a.father,'''')as father 
+  , r.RentType
+  ,CAST(CONCAT(IF((ss.SOCR = 'б-р' ) OR (ss.SOCR = 'пр-кт') OR (ss.SOCR = 'пл-ка') OR (ss.SOCR = 'проезд'), ss.SOCR, CONCAT(ss.SOCR, '.')), ' ', ss.NAME, ' д. ' , b.House, IFNULL(IF(b.Flat = '', '',CONCAT(', кв. ' , b.Flat)), ''),IFNULL(IF(rsi.rooms = '', '',CONCAT(', ком. ' , rsi.rooms)), '')) AS CHAR(255)) AS Address 
+  from contracts b
+  left join persons a 
+    on b.id_contract=a.id_Contract
+     and (a.id_status-1.5)/ABS(a.id_status-1.5)=[pStat] and a.wasDeleted=0 
+  left join sp_renttype r
+    on b.id_RentType=r.id_Rent 
+  left join sp_street ss
+    ON b.id_Street = ss.id_street
+  left join rooms_summ_info rsi ON
+    b.id_contract = rsi.id_contract
+  WHERE
+    b.wasDeleted=0 AND
+    ContractRegistrationNumber like '[pReg]'
+  AND ifnull(a.Family,'') LIKE '[pFam]' AND ifnull(a.Name,'') like '[pNam]' AND ifnull(a.Father, '') LIKE '[pFat]'
+  AND ifnull(ss.NAME,'') LIKE '[pStr]' AND ifnull(b.House,'') like '[pHos]' AND IF(b.Flat IS NOT NULL, IF(b.Flat = '', rsi.rooms ,b.Flat), b.Flat) like '[pFlt]' 
+  order BY
+    ContractRegistrationNumber
+</parameter>
+    </input>
+    <output>
+      <parameter name="table">searchTable</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[searchTable]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]Search.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

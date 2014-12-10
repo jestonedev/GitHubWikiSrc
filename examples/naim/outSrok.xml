@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+	FIO,
+	CONCAT(if(socr = 'б-р',socr,CONCAT(socr,'.')),' ',NAME,' д. ',House,IFNULL(IF(flat = '','',if(LEFT(flat,3) = 'ком',CONCAT(' ',flat),CONCAT(', кв. ',flat))),'')) AS shortAddress,
+	ContractRegistrationNumber,
+	if(rentType = 'коммерческий','коммерческого','специализированного') AS rentType,
+	DATE_FORMAT(ContractRegistrationDate, '%d.%m.%Y') AS ContractRegistrationDate,
+	fullAddress,
+	'[post]' as post,
+	'[Zam]' as Zam,
+	'[Ispl]' as Ispl,
+	'[Phone]' as Phone
+FROM
+	for_calendarout
+WHERE
+	id_contract in([id_contract])</parameter>
+    </input>
+    <output>
+      <parameter name="table">reportTable</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]outSrok.odt</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[reportTable]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">Ispl</parameter>
+      <parameter name="value">[Ispl]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">Phone</parameter>
+      <parameter name="value">[Phone]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

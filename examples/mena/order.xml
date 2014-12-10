@@ -1,0 +1,365 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT * FROM sp_warrant_template WHERE id_warrant_template_type = 9 and id_warrant_template = [id_warrant_template]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_templateVar</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT
+place1,
+place2,
+  id_contract,
+  order_date,
+  order_number,
+  agreement_registration_date,
+  side1_address,
+  side2_address,
+  side1_inventory_number,
+  side2_inventory_number,
+TRIM(TRAILING ',' FROM TRIM(TRAILING '0' FROM REPLACE(side1_total_area_num, '.',','))) AS side1_total_area_num,
+TRIM(TRAILING ',' FROM TRIM(TRAILING '0' FROM REPLACE(side2_total_area_num, '.',','))) AS side2_total_area_num,
+  side1_total_area_string,
+  side2_total_area_string,
+TRIM(TRAILING ',' FROM TRIM(TRAILING '0' FROM REPLACE(side1_living_area_num, '.',','))) AS side1_living_area_num,
+TRIM(TRAILING ',' FROM TRIM(TRAILING '0' FROM REPLACE(side2_living_area_num, '.',','))) AS side2_living_area_num,
+  side1_living_area_string,
+  side2_living_area_string,
+  if(side1_room_count = 1, ' комнаты',' комнат') as room_count1,
+  if(side2_room_count = 1, ' комнаты',' комнат') as room_count2,
+  side1_room_count,
+  side2_room_count,
+  side1_evaluation_price,
+  side2_evaluation_price,
+  order_boss_signer_post,
+  order_boss_signer_fio,
+  order_commitet_signer_post,
+  order_commitet_signer_fio,
+  order_verify_lawer_post,
+  order_verify_lawer_fio,
+  order_verify_boss_post,
+  order_verify_boss_fio,
+  order_worker_fio,
+  order_worker_phone,
+  order_year,
+  person_sex,
+  order_plural,	
+  type_of_ownership,
+  represent_surname
+FROM mena.v_order_info 
+WHERE id_contract = [id_contract]
+</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_order_db_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(CONCAT(p.family,' ',p.name),' ',p.father) AS person_snp
+FROM persons p INNER JOIN apartments a USING(id_apartment) 
+INNER JOIN contracts c ON (c.id_apartment_side2 = a.id_apartment)
+WHERE p.id_contractor = 1 AND id_contract = [id_contract] and p.was_deleted=0</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_order_persons_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(CONCAT(p.family, ' ', p.name),' ', p.father) AS snp, 
+IF(TRIM(portion) = '1','',' доля в праве ') AS portion_text, IF(TRIM(portion) = '1','',portion) AS portion
+FROM ((`contracts` `c` LEFT JOIN `apartments` `a`
+ON ((`c`.`id_apartment_side2` = `a`.`id_apartment`)))
+LEFT JOIN `persons` `p`
+ON ((`a`.`id_apartment` = `p`.`id_apartment`)))
+WHERE (p.id_contractor = 1) AND (c.id_contract = [id_contract])	and p.was_deleted=0</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_order_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_templateVar]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_templateVar</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_order_db_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_order_owner_ship_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_portion</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_templateVar]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_portion]</parameter>
+    </input>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side1_room_count</parameter>
+      <parameter name="textCase">Genitive</parameter>
+      <parameter name="sex">Female</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side2_room_count</parameter>
+      <parameter name="textCase">Genitive</parameter>
+      <parameter name="sex">Female</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side1_total_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side2_total_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side1_living_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side1_evaluation_price</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">ii,ff (iin) rn</parameter>
+      <parameter name="thousandSeparator"> </parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side2_living_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">order_boss_signer_fio</parameter>
+      <parameter name="format">n.p. ss</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">side2_evaluation_price</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">ii,ff (iin) rn</parameter>
+      <parameter name="thousandSeparator"> </parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">order_commitet_signer_fio</parameter>
+      <parameter name="format">n.p. ss</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">order_verify_lawer_fio</parameter>
+      <parameter name="format">n.p. ss</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">order_verify_boss_fio</parameter>
+      <parameter name="format">n.p. ss</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_order_row]</parameter>
+      <parameter name="column">order_worker_fio</parameter>
+      <parameter name="format">ss n.p.</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_order_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_order_persons_table]</parameter>
+      <parameter name="column">person_snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_order_persons_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ColumnConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_order_persons_table]</parameter>
+      <parameter name="column">person_snp</parameter>
+      <parameter name="separator">, </parameter>
+    </input>
+    <output>
+      <parameter name="outValue">persons_fio_genitive</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_order_owner_ship_table]</parameter>
+      <parameter name="column">snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Dative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_order_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="TableConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_order_owner_ship_table]</parameter>
+      <parameter name="rowSeparator">, </parameter>
+      <parameter name="cellSeparator"></parameter>
+    </input>
+    <output>
+      <parameter name="outValue">owner_ships</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]order.odt</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">owner_ships</parameter>
+      <parameter name="value">[owner_ships]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">persons_fio_genitive</parameter>
+      <parameter name="value">[persons_fio_genitive]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_order_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

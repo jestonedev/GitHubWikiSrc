@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT @i := @i + 1 AS number, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.street_name) AS street, 
+  IF(@street = v.street_name AND @house = v.house, NULL, v.house) AS house,
+  v.premises_num, v.include_restriction, v.exclude_restriction,
+  @street := v.street_name AS street_eq,
+  @house := v.house AS house_eq
+FROM (
+SELECT vks.street_name, b.house, v.premises_num, v.include_restriction, v.exclude_restriction
+FROM buildings b
+  INNER JOIN v_kladr_streets vks ON b.id_street = vks.id_street
+  INNER JOIN
+(SELECT p.id_building, p.id_premises, premises_num, 
+  CONCAT('№',fh.include_restriction_number,' - ',DATE_FORMAT(fh.include_restriction_date,'%d.%m.%Y')) AS include_restriction,
+  CONCAT('№',fh.exclude_restriction_number,' - ',DATE_FORMAT(fh.exclude_restriction_date,'%d.%m.%Y')) AS exclude_restriction
+FROM premises p INNER JOIN
+  funds_premises_assoc fpa ON p.id_premises = fpa.id_premises
+  INNER JOIN funds_history fh ON fpa.id_fund = fh.id_fund
+WHERE p.deleted &lt;&gt; 1 AND fpa.deleted &lt;&gt; 1 AND fh.deleted &lt;&gt; 1 AND fh.id_fund_type = 3
+UNION ALL
+SELECT p.id_building, p.id_premises, CONCAT(p.premises_num,'(',sp.sub_premises_num,')'),
+  CONCAT('№',fh.include_restriction_number,' - ',DATE_FORMAT(fh.include_restriction_date,'%d.%m.%Y')) AS include_restriction,
+  CONCAT('№',fh.exclude_restriction_number,' - ',DATE_FORMAT(fh.exclude_restriction_date,'%d.%m.%Y')) AS exclude_restriction
+FROM funds_sub_premises_assoc spa
+  INNER JOIN sub_premises sp ON spa.id_sub_premises = sp.id_sub_premises
+  INNER JOIN premises p ON sp.id_premises = p.id_premises
+  INNER JOIN funds_history fh ON spa.id_fund = fh.id_fund
+WHERE sp.deleted &lt;&gt; 1 AND spa.deleted &lt;&gt; 1 AND fh.deleted &lt;&gt; 1 AND fh.id_fund_type = 3) v ON b.id_building = v.id_building
+WHERE SUBSTRING(b.id_street, 1, 13) IN ([regions])
+ORDER BY vks.street_name, b.house) v,
+  (SELECT @i := 0, @street := NULL, @house := NULL) vars</parameter>
+    </input>
+    <output>
+      <parameter name="table">special_fund_table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\registry\special_fund.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[special_fund_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

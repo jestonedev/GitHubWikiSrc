@@ -1,0 +1,367 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <exclude>*</exclude>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>MenaModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetProvider" repeat="1">
+    <input>
+      <parameter name="name">odbc</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlOpenConnection" repeat="1" />
+  <step plugin="SqlDataSource" action="SqlModifyQuery" repeat="1">
+    <input>
+      <parameter name="query">SET SESSION group_concat_max_len = 1000000;</parameter>
+    </input>
+    <output>
+      <parameter name="rowsAffected"></parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT
+  (CASE
+-- Если Манушин
+      WHEN (`c`.`id_delegate` = 5) THEN '$i$$b$Муниципальное учреждение «Администрация муниципального образования города Братска»,$/b$$/i$ находящееся по адресу: 665708, Российская Федерация, Иркутская область, город Братск, жилой район Центральный, проспект Ленина, 37, свидетельство о государственной регистрации № 3917, дата регистрации 14 июля 1994 года, регистрационный номер 1445; свидетельство о внесении записи в Единый государственный реестр юридических лиц о юридическом лице, зарегистрированном до 01 июля 2002 года серии 38 № 000178633, дата внесения записи 22 ноября 2002 года, основной государственный регистрационный номер 1023800841712, выдано Инспекцией МНС России по Центральному округу г. Братска Иркутской области, ИНН 3803100833, действующее от имени $i$$b$МУНИЦИПАЛЬНОГО ОБРАЗОВАНИЯ ГОРОДА БРАТСКА$/b$$/i$ на основании Положения об администрации муниципального образования  города Братска, утвержденного решением Думы города Братска от 28 августа 2006 года  № 193/г-Д,  устава муниципального образования города Братска (в редакции от 29.04.2013 № 523/г-Д), в лице председателя Комитета по управлению муниципальным имуществом администрации города Братска $i$$b$$delegate_fio_rod$$/b$$/i$, $delegate_warrant$, именуемое в дальнейшем СТОРОНА 1, и' 
+	ELSE '$i$$b$Комитет по управлению муниципальным имуществом администрации города Братска$/b$$/i$, $contract_reason$ от имени $i$$b$муниципального образования города Братска$/b$$/i$, в лице представителя $i$$b$$delegate_fio_rod$$/b$$/i$, $delegate_birth$ года рождения, паспорт серия $delegate_passport_seria$ № $delegate_passport_num$ выдан $delegate_passport_issued$ $delegate_passport_issued_date$, $delegate_warrant$, именуемый в дальнейшем СТОРОНА 1, и'
+    END) AS `parametr1`
+FROM `contracts` `c`
+WHERE c.id_contract = [id_contract]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_contract_pre_info</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT * FROM v_contract_info WHERE id_contract = [id_contract]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_contract_db_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">
+				SELECT CONCAT(CONCAT(p.family, ' ', p.name),' ', p.father) AS snp, 
+					IF(TRIM(portion) = '1','',' – доля в праве ') AS portion_text, IF(TRIM(portion) = '1','',portion) AS portion
+				FROM ((`contracts` `c`
+				  LEFT JOIN `apartments` `a`
+					ON ((`c`.`id_apartment_side2` = `a`.`id_apartment`)))
+				  LEFT JOIN `persons` `p`
+					ON ((`a`.`id_apartment` = `p`.`id_apartment`)))
+				WHERE (p.id_contractor = 1) AND (c.id_contract = [id_contract])			
+			</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_contract_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[v_contract_db_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">id_apartment_side2</parameter>
+    </input>
+    <output>
+      <parameter name="value">var_id_apartments_side2</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">select * from v_persons_contract_sex where 
+id_apartment=[var_id_apartments_side2]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_persons_sex_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">select CONCAT(snp, If(ISNULL(warrant),'',','))AS snp, 
+If(ISNULL(warrant),'',warrant) AS warrant
+  from v_persons
+where id_apartment=[var_id_apartments_side2]</parameter>
+    </input>
+    <output>
+      <parameter name="table">v_persons_table</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">select copies from v_persons_contract_count
+where id_apartment=[var_id_apartments_side2]</parameter>
+    </input>
+    <output>
+      <parameter name="table">copy_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[copy_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">copies</parameter>
+    </input>
+    <output>
+      <parameter name="value">var_copies</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlCloseConnection" repeat="1" />
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_contract_pre_info]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_contract_pre_info</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_contract_db_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[v_persons_sex_table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">v_persons_sex_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameCellToCase" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">delegate_fio_rod</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">contract_registration_date_string</parameter>
+      <parameter name="format">ddn MMg yyyyg</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side1_floor</parameter>
+      <parameter name="textCase">Prepositional</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">true</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side2_floor</parameter>
+      <parameter name="textCase">Prepositional</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">true</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side1_total_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side2_total_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side1_living_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertFloatCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side2_living_area_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side1_evaluation_price_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="column">side2_evaluation_price_string</parameter>
+      <parameter name="textCase">Nominative</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertIntToString" repeat="1">
+    <input>
+      <parameter name="number">[var_copies]</parameter>
+      <parameter name="textCase">Genitive</parameter>
+      <parameter name="sex">Male</parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="words">var_copies</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[v_contract_owner_ship_table]</parameter>
+      <parameter name="column">snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Dative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">v_contract_owner_ship_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="TableConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[v_contract_owner_ship_table]</parameter>
+      <parameter name="rowSeparator">, </parameter>
+      <parameter name="cellSeparator"></parameter>
+    </input>
+    <output>
+      <parameter name="outValue">owner_ships</parameter>
+    </output>
+  </step>
+  <step plugin="MenaModule" action="MenaFloorTemplate" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="columnFloorName">side1_floor</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="MenaModule" action="MenaFloorTemplate" repeat="1">
+    <input>
+      <parameter name="inRow">[v_contract_row]</parameter>
+      <parameter name="columnFloorName">side2_floor</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">v_contract_row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">[reportPath]contract.odt</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_contract_pre_info]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">owner_ships</parameter>
+      <parameter name="value">[owner_ships]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_contract_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[v_persons_sex_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">var_copies</parameter>
+      <parameter name="value">[var_copies]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[v_persons_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

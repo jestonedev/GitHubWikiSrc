@@ -1,0 +1,394 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  tp.id_process,
+  tp.registration_num, 
+  DATE_FORMAT(tp.registration_date,'%d.%m.%Y') AS registration_date, 
+  tp.registration_date AS registration_date_str, 
+  tp.id_rent_type,
+  REPLACE(ta.agreement_content,'\r\n','$br$') AS agreement_content,
+  NULL AS guardian
+FROM tenancy_processes tp
+  INNER JOIN tenancy_agreements ta ON tp.id_process = ta.id_process
+WHERE ta.deleted &lt;&gt; 1 AND tp.deleted &lt;&gt; 1 AND (tp.registration_num IS NOT NULL) AND ta.id_agreement = [id_agreement];</parameter>
+    </input>
+    <output>
+      <parameter name="table">t1</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[t1]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">id_process</parameter>
+    </input>
+    <output>
+      <parameter name="value">id_process</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[t1]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">id_rent_type</parameter>
+    </input>
+    <output>
+      <parameter name="value">id_rent_type</parameter>
+    </output>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [id_rent_type] != 1</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">8</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\agreement_commercial.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [id_rent_type] != 2</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">11</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\agreement_special.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = [id_rent_type] != 3</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">14</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\nas\media$\ActivityManager\templates\registry\tenancy\agreement_social.odt</parameter>
+    </input>
+  </step>
+  <step plugin="JSModule" action="JSRun" repeat="1">
+    <input>
+      <parameter name="script">result = ([id_rent_type] == 1) || ([id_rent_type] == 2) || ([id_rent_type] == 3)</parameter>
+    </input>
+    <output>
+      <parameter name="result">condition</parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonToStep" repeat="1">
+    <input>
+      <parameter name="condition">[condition]</parameter>
+      <parameter name="step">18</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IODebugMessage" repeat="1">
+    <input>
+      <parameter name="message">Вы пытаетесь распечатать соглашение на неподдерживаемый тип найма</parameter>
+    </input>
+  </step>
+  <step plugin="IOModule" action="IOIfCondititonExit" repeat="1">
+    <input>
+      <parameter name="condition">true</parameter>
+    </input>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeColToString" repeat="1">
+    <input>
+      <parameter name="inTable">[t1]</parameter>
+      <parameter name="column">registration_date_str</parameter>
+      <parameter name="format">ddn MMg yyyyg</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t1</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(tp.surname, ' ', tp.`name`, 
+  IF(tp.patronymic IS NULL, '', CONCAT(' ', tp.patronymic))) AS tenant_snp,
+  DATE_FORMAT(tp.date_of_birth,'%d.%m.%Y') AS tenant_date_of_birth
+FROM tenancy_persons tp
+WHERE deleted &lt;&gt; 1 AND tp.id_kinship = 1 AND tp.id_process = [id_process] AND exclude_date IS NULL
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">t2</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(chairman.surname, ' ', chairman.`name`, 
+  IF(chairman.patronymic IS NULL, '', CONCAT(' ', chairman.patronymic))) AS chairman_snp,
+  chairman.post AS chairman_post, snp_template.snp_template, committee.committee_name
+FROM (
+SELECT h.*, cw.chairman_warrant
+FROM history_chairmans h
+  INNER JOIN chairman_warrants cw ON h.id_chairman_warrant = cw.id_chairman_warrant
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_chairmans
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) chairman
+JOIN (
+SELECT *
+FROM history_sign_doc_snp_templates
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_sign_doc_snp_templates
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) snp_template
+JOIN (
+SELECT *
+FROM history_committee_names
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_committee_names
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) committee</parameter>
+    </input>
+    <output>
+      <parameter name="table">t3</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetCell" repeat="1">
+    <input>
+      <parameter name="table">[t3]</parameter>
+      <parameter name="rowNumber">0</parameter>
+      <parameter name="columnName">snp_template</parameter>
+    </input>
+    <output>
+      <parameter name="value">snp_template</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[t3]</parameter>
+      <parameter name="column">chairman_snp</parameter>
+      <parameter name="format">[snp_template]</parameter>
+      <parameter name="textCase">Nominative</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t3</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT tr.id_reason, IF(tr.id_reason = 23,
+  'в целях реализации муниципальной целевой программы «Переселение граждан из ветхого и аварийного жилищного фонда в городе Братске на 2005-2025 гг.», утвержденной', 
+  'на основании решения о предоставлении жилого помещения:') AS reason_group, 
+  GROUP_CONCAT(tr.reason_prepared) AS reasons
+FROM tenancy_reasons tr
+WHERE tr.deleted &lt;&gt; 1 AND tr.id_process = [id_process]
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">t4</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT 
+  CONCAT('в лице ', IFNULL(chairman.post_genetive,''),' ') AS prefix, 
+  CONCAT(chairman.surname, ' ', chairman.`name`, 
+  IF(chairman.patronymic IS NULL, '', CONCAT(' ', chairman.patronymic))) AS snp,
+  CONCAT(', ',chairman_warrant) AS warrant
+FROM (
+SELECT h.*, cw.chairman_warrant
+FROM history_chairmans h
+  INNER JOIN chairman_warrants cw ON h.id_chairman_warrant = cw.id_chairman_warrant
+WHERE start_date =
+(SELECT MAX(start_date) AS max_date
+FROM history_chairmans
+WHERE start_date &lt; (
+  SELECT tp.registration_date
+  FROM tenancy_processes tp
+  WHERE deleted &lt;&gt; 1 AND (tp.registration_date IS NOT NULL) AND tp.id_process = [id_process]))
+LIMIT 1) chairman</parameter>
+    </input>
+    <output>
+      <parameter name="table">t5</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertNameColToCase" repeat="1">
+    <input>
+      <parameter name="inTable">[t5]</parameter>
+      <parameter name="column">snp</parameter>
+      <parameter name="format">ss nn pp</parameter>
+      <parameter name="textCase">Genitive</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">t5</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="TableConcat" repeat="1">
+    <input>
+      <parameter name="inTable">[t5]</parameter>
+      <parameter name="rowSeparator"></parameter>
+      <parameter name="cellSeparator"></parameter>
+    </input>
+    <output>
+      <parameter name="outValue">in_face_of</parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT CONCAT(tp.surname, ' ', tp.`name`, 
+  IF(tp.patronymic IS NULL, '', CONCAT(' ', tp.patronymic))) AS tenant_snp,
+  CONCAT(
+  IFNULL(tp.document_num,''), 
+  IF(tp.document_num IS NULL AND tp.document_seria IS NULL,'',' '),
+  IFNULL(tp.document_seria,'')) AS tenant_document
+FROM tenancy_persons tp
+  LEFT JOIN v_kladr_streets vks1 ON tp.registration_id_street = vks1.id_street 
+  LEFT JOIN v_kladr_streets vks2 ON  tp.residence_id_street = vks2.id_street
+WHERE deleted &lt;&gt; 1 AND tp.id_kinship = 1 AND tp.id_process = [id_process] AND exclude_date IS NULL
+LIMIT 1</parameter>
+    </input>
+    <output>
+      <parameter name="table">tenant_table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t1]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t1_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t2]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t2_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t3]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t3_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t4]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t4_row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[t5]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row">t5_row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t1_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t2_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t3_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t4_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[t5_row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[tenant_table]</parameter>
+      <parameter name="xmlContractor">Row</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValue" repeat="1">
+    <input>
+      <parameter name="name">in_face_of</parameter>
+      <parameter name="value">[in_face_of]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>
