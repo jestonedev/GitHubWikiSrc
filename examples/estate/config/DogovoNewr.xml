@@ -1,0 +1,213 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSetProvider" repeat="1">
+    <input>
+      <parameter name="name">SQL</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">select ISNULL(Contract.ContractNo, '_______') AS ContractNo
+	, ISNULL(convert(varchar(50), Contract.ContractDate, 104), '_________') AS ContractDate
+	, case
+		when Pretender.SubjectKind = '000000001850'
+			then ISNULL(ISNULL(Org.SmallName, Org.Name), '___________')
+		when Pretender.SubjectKind = '000000001852'
+			then case
+					when ISNULL(Person.LastName,'') + ISNULL(' ' + Person.FirstName,'') + ISNULL(' ' + Person.PatrName,'') = ''
+						then '_______________'
+					else ISNULL(Person.LastName,'') + ISNULL(' ' + Person.FirstName,'') + ISNULL(' ' + Person.PatrName,'')
+				 end
+	end as PretenderName
+	, ISNULL(convert(varchar(50), OrgReg.RegDate, 104), '_________') AS RegDate
+	, case
+		when ISNULL(OrgReg.RegNoSeria, '') + ISNULL(' ' + OrgReg.RegNo, '') = ''
+			then '____________'
+		else ISNULL(OrgReg.RegNoSeria, '') + ISNULL(' ' + OrgReg.RegNo, '')
+	end AS RegNo
+	, case
+		when ISNULL(PersonDoc.Series,'') + ISNULL(' ' + PersonDoc.PersonDocNo,'') = ''
+			then '_________'
+		else ISNULL(PersonDoc.Series,'') + ISNULL(' ' + PersonDoc.PersonDocNo,'')
+	end AS PersonDocNo
+	, ISNULL(PersonDoc.PersonDocOrgName, '____________') AS PersonDocOrgName
+	, ISNULL(convert(varchar(50), PersonDoc.PersonDocDate, 104), '___________') AS PersonDocDate
+	, ISNULL(ISNULL(Calculation.RentPaymentInMonth*12, Calculation.RentCalculatedPaymentInYear), '') AS PaymentInYear
+	, ISNULL(ISNULL(Calculation.RentPaymentInMonth, Calculation.RentCalculatedPaymentInYear/12), '') AS PaymentInMonth
+	, ISNULL(Contract.RentOficialStartDate, '') AS RentOficialStartDate
+	, ISNULL(Contract.RentOficialFinishDate, '') AS RentOficialFinishDate
+	, case
+		when ISNULL('г. ' + Reginon.Name, '') + ISNULL(', ж.р. ' + Microdistrict.Name,'') + ISNULL(', ' + replace(StreetKind.Format,'%s',''), '') + ISNULL(' ' + Street.Name, '') + ISNULL(', д. ' + PostAddr.House, '') + ISNULL(', кв. ' + PostAddr.Flat, '') = ''
+			then '_______________'
+		else ISNULL('г. ' + Reginon.Name, '') + ISNULL(', ж.р. ' + Microdistrict.Name,'') + ISNULL(', ' + replace(StreetKind.Format,'%s',''), '') + ISNULL(' ' + Street.Name, '') + ISNULL(', д. ' + PostAddr.House, '') + ISNULL(', кв. ' + PostAddr.Flat, '')
+	end AS PretenderAdress
+	, case
+		when Pretender.SubjectKind = '000000001850'
+			then ISNULL(Org.Inn, '_________')
+		when Pretender.SubjectKind = '000000001852'
+			then ISNULL(Person.INN, '___________')
+	end AS INN
+	, ISNULL(Contact.ContactAddrValue, '___________') AS phones
+from EstateBratsk.dbo.EstateMovableRentContractProcess Process
+left join EstateBratsk.dbo.EstateMovableRentContract Contract
+	on Process.OID = Contract.MovableRentContractProcessID
+left join EstateBratsk.dbo.EstateMovableRentPretender Pretender
+	on Process.OID = Pretender.MovableRentContractProcessID
+left join EstateBratsk.dbo.Org Org
+	on Pretender.SubjectID = Org.OID
+	and Pretender.SubjectKind = '000000001850'
+left join EstateBratsk.dbo.Person Person
+	on Pretender.SubjectID = Person.OID
+	and Pretender.SubjectKind = '000000001852'
+left join EstateBratsk.dbo.PersonDoc PersonDoc
+	on Person.OID = PersonDoc.SubjectID
+/* Берем последнюю регистрацию, по дате регистрации */
+left join EstateBratsk.dbo.OrgReg OrgReg
+	on Pretender.SubjectID = OrgReg.ObjectID
+	and (OrgReg.RegDate = (select max(Reg.RegDate)
+							from EstateBratsk.dbo.OrgReg Reg
+							where Reg.ObjectID = OrgReg.ObjectID
+							group by Reg.ObjectID) 
+		 or OrgReg.RegDate is null)
+left join EstateBratsk.dbo.EstateMovableRentCalculation Calculation
+	on Process.OID = Calculation.MovableRentContractProcessID
+	and Calculation.CalculationDate = (select max(Calc.CalculationDate)
+										from EstateBratsk.dbo.EstateMovableRentCalculation Calc
+										where Calc.MovableRentContractProcessID = Calculation.MovableRentContractProcessID)
+/* Берем только Юридические, действующие адреса. 
+В случае если их несколько берется первый попавшийся. */
+left join EstateBratsk.dbo.PostAddr PostAddr
+	on Pretender.SubjectID = PostAddr.ObjectID
+	and PostAddr.ObjectKind in ('000000001850','000000001852')
+	and PostAddr.PostAddrKindID = '000000001702'
+	and (PostAddr.CheckAddr = '1' or PostAddr.CheckAddr is null)
+left join EstateBratsk.dbo.AddrRegion Reginon
+	on PostAddr.RegionID = Reginon.OID
+left join EstateBratsk.dbo.AddrMicrodistrict Microdistrict
+	on PostAddr.MicrodistrictID = Microdistrict.OID
+left join EstateBratsk.dbo.AddrStreet Street
+	on PostAddr.StreetID = Street.OID
+left join EstateBratsk.dbo.AddrStreetKind StreetKind
+	on Street.StreetKindID = StreetKind.OID
+left join EstateBratsk.dbo.ContactAddr Contact
+	on Pretender.SubjectID = Contact.SubjectID
+	and Contact.ObjectKind in ('000000001852','000000001850')
+where Process.OID = '[ProcessOID]'</parameter>
+    </input>
+    <output>
+      <parameter name="table"></parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row"></parameter>
+    </output>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">select 
+	case
+		when rentObject.ObjectKindID = '000000001877' then
+			transport.Model + ', р/з ' + transport.RegistrationSign 
+		when rentObject.ObjectKindID = 'EstateEqpmnt' then
+			equipment.Name + ', и/н ' + equipment.InventoryNo
+		when rentObject.ObjectKindID = '000000001874' then
+			stuff.Name + ', и/н ' + stuff.InventoryNo
+	end AS RentObjectName,
+	costOnDate.BalanceCostValue,
+	costOnDate.ExhValue,
+	costOnDate.DepreciatedCostValue
+from EstateBratsk.dbo.EstateMovableRentContractProcess process
+inner join EstateBratsk.dbo.EstateMovableRentObject rentObject
+	on process.OID = rentObject.MovableRentContractProcessID
+left join EstateBratsk.dbo.EstateTransport transport
+	on rentObject.ObjectID = Transport.OID
+	and rentObject.ObjectKindID = '000000001877'
+left join EstateBratsk.dbo.EstateEquipment equipment
+	on rentObject.ObjectID = equipment.OID
+	and rentObject.ObjectKindID = 'EstateEqpmnt'
+left join EstateBratsk.dbo.EstateStuff stuff
+	on rentObject.ObjectID = stuff.OID
+	and rentObject.ObjectKindID = '000000001874'
+/* Берем последние стоимости по дате */
+left join EstateBratsk.dbo.EstateCostOnDate costOnDate
+	on rentObject.ObjectID = costOnDate.ObjectID
+	and costOnDate.ObjectKindID in ('000000001877', '000000001874', '000000Eqpmnt')
+	and (costOnDate.CostDate = (select MAX(cost.BalanceCostValue)
+								from EstateBratsk.dbo.EstateCostOnDate cost
+								where cost.ObjectID = costOnDate.ObjectID
+								group by cost.ObjectID)
+		or costOnDate.CostDate is null)
+where process.OID = '[ProcessOID]'</parameter>
+    </input>
+    <output>
+      <parameter name="table">Pril1</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[Pril1]</parameter>
+      <parameter name="xmlContractor">row</parameter>
+    </input>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">RentOficialStartDate</parameter>
+      <parameter name="format">«dd» MMg yyyy</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertDateTimeCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">RentOficialFinishDate</parameter>
+      <parameter name="format">«dd» MMg yyyy</parameter>
+      <parameter name="firstCapital">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\NAS\media$\ActivityManager\templates\estate\temlates\ДА  имущество без торгов без оценке без акта и с актом на 2014 год (провер).odt</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

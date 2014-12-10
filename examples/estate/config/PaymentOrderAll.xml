@@ -1,0 +1,117 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSetProvider" repeat="1">
+    <input>
+      <parameter name="name">SQL</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">SELECT convert(varchar,SPA.PayerDate, 104) AS PayerDate
+	, convert(varchar,ISNULL(Payment.BankDeliveryDate, ISNULL(Payment2.BankDeliveryDate, Payment3.BankDeliveryDate)), 104) AS BankDeliveryDate
+	, SPA.DocNo AS PaymentNumber
+	, convert(varchar,SPA.PaymentDocCreationDate, 104) AS DocDate
+	, ISNULL(Payment.PaymentKind, ISNULL(Payment2.PaymentKind, Payment3.PaymentKind)) AS PaymentKind
+	, ISNULL(BasePaymentValue, SPA.PaymentValue) AS PaymentSummString
+	, SPA.PaymentValue AS PaymentSumm
+	, SPA.PayerInn
+	, SPA.PayerKpp
+	, SPA.PayerName
+	, ISNULL(Payment.PayerAccountNumber, ISNULL(Payment2.PayerAccountNumber, Payment3.PayerAccountNumber)) AS PayerAccountNumber
+	, ISNULL(Payment.PayerBankName, ISNULL(Payment2.PayerBankName, Payment3.PayerBankName)) AS PayerBankName
+	, ISNULL(Payment.PayerBankBik, ISNULL(Payment2.PayerBankBik, Payment3.PayerBankBik)) AS PayerBankBik
+	, ISNULL(Payment.PayerBankLoroAccountNumber, ISNULL(Payment2.PayerBankLoroAccountNumber, Payment3.PayerBankLoroAccountNumber)) AS PayerBankLoroAccountNumber
+	, ISNULL(Payment.RecipientBankName, ISNULL(Payment2.RecipientBankName, Payment3.RecipientBankName)) AS RecipientBankName
+	, ISNULL(Payment.RecipientBankBik, ISNULL(Payment2.RecipientBankBik, Payment3.RecipientBankBik)) AS RecipientBankBik
+	, ISNULL(Payment.RecipientBankLoroAccountNumber, ISNULL(Payment2.RecipientBankLoroAccountNumber, Payment3.RecipientBankLoroAccountNumber)) AS RecipientBankLoroAccountNumber
+	, ISNULL(Payment.RecipientName, ISNULL(Payment2.RecipientName, Payment3.RecipientName)) AS RecipientName
+	, ISNULL(Payment.RecipientInn, ISNULL(Payment2.RecipientInn, Payment3.RecipientInn)) AS RecipientInn
+	, ISNULL(Payment.RecipientKpp, ISNULL(Payment2.RecipientKpp, Payment3.RecipientKpp)) AS RecipientKpp
+	, ISNULL(Payment.RecipientAccountNumber, ISNULL(Payment2.RecipientAccountNumber, Payment3.RecipientAccountNumber)) AS RecipientAccountNumber
+	, ISNULL(Payment.OperationKind, ISNULL(Payment2.OperationKind, Payment3.OperationKind)) AS OperationKind
+	, ISNULL(Payment.PaymentPriority, ISNULL(Payment2.PaymentPriority, Payment3.PaymentPriority)) AS PaymentPriority
+	, ISNULL(KbkCodeFromPaymentDoc, SPA.taxkbk) AS KbkCode
+	, ISNULL(OkatoCodeFromIncomeApp, SPA.okato) AS OkatoCode
+	, SPA.Comment AS PaymentDest
+	, Payment.UIN AS UIN
+	, ISNULL(Payment.PayerStatus, ISNULL(Payment2.PayerStatus, Payment3.PayerStatus)) AS PayerStatus
+	, ISNULL(Payment.TaxDocNumber, ISNULL(Payment2.TaxDocNumber, Payment3.TaxDocNumber)) AS TaxDocNumber
+	, Payment.TaxDocDate
+FROM EstateBratsk.dbo.EstateSPAPayment SPA
+LEFT JOIN EstateBratsk.dbo.Estate_IncomeApp Payment
+	ON SPA.OID = Payment.SPAPayment 
+LEFT JOIN EstateBratsk.dbo.Estate_AdditionalTakingApp Payment2
+	ON SPA.OID = Payment2.SPAPayment
+LEFT JOIN EstateBratsk.dbo.Estate_PaymentOwnershipQuery Payment3
+	ON SPA.OID = Payment3.SPAPayment
+WHERE SPA.OID IN ([sqlQuery])
+ORDER BY convert(datetime,SPA.DocDate, 104), ISNULL(Payment.RecipientInn, ISNULL(Payment2.RecipientInn, Payment3.RecipientInn)),SPA.DocNo</parameter>
+    </input>
+    <output>
+      <parameter name="table"></parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyColToString" repeat="1">
+    <input>
+      <parameter name="inTable">[table]</parameter>
+      <parameter name="column">PaymentSummString</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nniin rn ffn kn</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">true</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">table</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyColToString" repeat="1">
+    <input>
+      <parameter name="inTable">[table]</parameter>
+      <parameter name="column">PaymentSumm</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nii-ff</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outTable">table</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\NAS\media$\ActivityManager\templates\estate\temlates\Платежное поруение.ods</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTableValue" repeat="1">
+    <input>
+      <parameter name="table">[table]</parameter>
+      <parameter name="xmlContractor">Table</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>

@@ -1,0 +1,115 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<activity>
+  <plugins>
+    <include>ConvertModule.dll</include>
+    <include>IOModule.dll</include>
+    <include>JSModule.dll</include>
+    <include>ReportModule.dll</include>
+    <include>SqlDataSource.dll</include>
+  </plugins>
+  <language>ru</language>
+  <step plugin="SqlDataSource" action="SqlSetConnectionString" repeat="1">
+    <input>
+      <parameter name="connectionString">[connectionString]</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSetProvider" repeat="1">
+    <input>
+      <parameter name="name">SQL</parameter>
+    </input>
+  </step>
+  <step plugin="SqlDataSource" action="SqlSelectTable" repeat="1">
+    <input>
+      <parameter name="query">execute ReceiptDI @RentContracProcessOID = '[RentContracProcessOID]'</parameter>
+    </input>
+    <output>
+      <parameter name="table"></parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="GetRow" repeat="1">
+    <input>
+      <parameter name="table">[table]</parameter>
+      <parameter name="rowNumber">0</parameter>
+    </input>
+    <output>
+      <parameter name="row"></parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">BalanceValueString</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nniin rn ffn kn</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">true</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">BalanceValue</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nii-ff</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">BalancePenaltyValueString</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nniin rn ffn kn</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">true</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ConvertModule" action="ConvertCurrencyCellToString" repeat="1">
+    <input>
+      <parameter name="inRow">[row]</parameter>
+      <parameter name="column">BalancePenaltyValue</parameter>
+      <parameter name="currencyType">Ruble</parameter>
+      <parameter name="format">nii-ff</parameter>
+      <parameter name="thousandSeparator"></parameter>
+      <parameter name="firstCapital">false</parameter>
+      <parameter name="isOrdinal">false</parameter>
+    </input>
+    <output>
+      <parameter name="outRow">row</parameter>
+    </output>
+  </step>
+  <step plugin="ReportModule" action="ReportSetTemplateFile" repeat="1">
+    <input>
+      <parameter name="fileName">\\NAS\media$\ActivityManager\templates\estate\temlates\КвитанцияБанкДИ.docx</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportSetStringValues" repeat="1">
+    <input>
+      <parameter name="values">[row]</parameter>
+    </input>
+  </step>
+  <step plugin="ReportModule" action="ReportGenerate" repeat="1">
+    <output>
+      <parameter name="fileName"></parameter>
+    </output>
+  </step>
+  <step plugin="IOModule" action="IOOpenFile" repeat="1">
+    <input>
+      <parameter name="fileName">[fileName]</parameter>
+      <parameter name="arguments"></parameter>
+    </input>
+  </step>
+</activity>
